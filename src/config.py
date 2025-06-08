@@ -28,6 +28,10 @@ def get_default_storage():
     """Get default storage from environment or use auto-detection."""
     return os.getenv("PROXMOX_DEFAULT_STORAGE", None)  # None means auto-detect
 
+# Storage Preferences
+PREFER_SHARED_STORAGE = os.getenv("PROXMOX_PREFER_SHARED_STORAGE", "true").lower() in ("true", "1", "yes")
+ALLOW_LOCAL_STORAGE = os.getenv("PROXMOX_ALLOW_LOCAL_STORAGE", "false").lower() in ("true", "1", "yes")
+
 # Test Configuration
 TEST_VM_ID_RANGE_START = int(os.getenv("PROXMOX_TEST_VMID_START", "9990"))
 TEST_VM_ID_RANGE_END = int(os.getenv("PROXMOX_TEST_VMID_END", "9999"))

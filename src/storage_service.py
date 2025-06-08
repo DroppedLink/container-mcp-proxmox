@@ -220,9 +220,16 @@ class StorageService(BaseProxmoxService):
             raise
 
     def get_suitable_storage(self, node: str, content_type: str, min_free_gb: float = 0) -> List[Dict[str, Any]]:
-        """Find storage suitable for specific content type with optional minimum free space."""
+        """Find storage suitable for specific content type with optional minimum free space.
+        
+        Prioritizes shared storage for cluster mobility unless explicitly configured otherwise.
+        """
         try:
+            from .config import PREFER_SHARED_STORAGE, ALLOW_LOCAL_STORAGE
+            
             suitable_storage = []
+            shared_storage = []
+            local_storage = []
             
             # Get all storage for the node
             storages = self.list_storage(node)
@@ -240,16 +247,41 @@ class StorageService(BaseProxmoxService):
                 if min_free_gb > 0 and storage.get('avail_gb', 0) < min_free_gb:
                     continue
                 
-                suitable_storage.append({
+                storage_info = {
                     'storage': storage['storage'],
                     'type': storage['type'],
                     'avail_gb': storage.get('avail_gb', 0),
                     'usage_percent': storage.get('usage_percent', 0),
                     'shared': storage.get('shared', False)
-                })
+                }
+                
+                # Separate shared and local storage
+                if storage_info['shared']:
+                    shared_storage.append(storage_info)
+                else:
+                    local_storage.append(storage_info)
             
-            # Sort by available space (descending)
-            suitable_storage.sort(key=lambda x: x['avail_gb'], reverse=True)
+            # Apply storage preferences
+            if PREFER_SHARED_STORAGE:
+                # Sort shared storage by available space (descending)
+                shared_storage.sort(key=lambda x: x['avail_gb'], reverse=True)
+                suitable_storage.extend(shared_storage)
+                
+                # Only add local storage if allowed and no shared storage available
+                if ALLOW_LOCAL_STORAGE and (not shared_storage or min_free_gb > 0):
+                    local_storage.sort(key=lambda x: x['avail_gb'], reverse=True)
+                    suitable_storage.extend(local_storage)
+                    
+                logger.info(f"Storage selection for {content_type} on {node}: {len(shared_storage)} shared, {len(local_storage)} local")
+                if shared_storage:
+                    logger.info(f"Preferring shared storage: {shared_storage[0]['storage']} ({shared_storage[0]['avail_gb']:.1f}GB available)")
+                elif local_storage and ALLOW_LOCAL_STORAGE:
+                    logger.info(f"No shared storage available, using local: {local_storage[0]['storage']} ({local_storage[0]['avail_gb']:.1f}GB available)")
+            else:
+                # Legacy mode: all storage sorted by available space
+                all_storage = shared_storage + local_storage
+                all_storage.sort(key=lambda x: x['avail_gb'], reverse=True)
+                suitable_storage = all_storage
             
             return suitable_storage
             

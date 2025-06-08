@@ -68,7 +68,7 @@ class ProxmoxService(BaseProxmoxService):
     
     async def create_vm(self, vmid: str, node: str, name: str, cores: int = 1, 
                   memory: int = 512, disk_size: str = "8G", 
-                  iso_image: str = "", storage: str = "local-lvm",
+                  iso_image: str = "", storage: str = "",
                   os_type: str = "l26", start_after_create: bool = False) -> Dict[str, Any]:
         """Create a new VM."""
         return self.vm_service.create_vm(
@@ -78,7 +78,7 @@ class ProxmoxService(BaseProxmoxService):
     
     async def create_container(self, vmid: str, node: str, hostname: str, cores: int = 1,
                         memory: int = 512, rootfs_size: str = "8G",
-                        storage: str = "local-lvm", template: str = "",
+                        storage: str = "", template: str = "",
                         password: str = "", unprivileged: bool = True,
                         start_after_create: bool = False) -> Dict[str, Any]:
         """Create a new LXC container."""

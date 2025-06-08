@@ -8,7 +8,7 @@ from .config import (
     DEFAULT_VM_CORES, DEFAULT_VM_MEMORY, DEFAULT_VM_DISK_SIZE, DEFAULT_VM_OS_TYPE,
     DEFAULT_SCSI_HARDWARE, DEFAULT_VM_NETWORK, DEFAULT_CONTAINER_CORES,
     DEFAULT_CONTAINER_MEMORY, DEFAULT_CONTAINER_ROOTFS_SIZE, DEFAULT_CONTAINER_NETWORK,
-    get_default_storage
+    get_default_storage, PREFER_SHARED_STORAGE, ALLOW_LOCAL_STORAGE
 )
 
 logger = logging.getLogger(__name__)
@@ -96,17 +96,21 @@ class VMService(BaseProxmoxService):
             if not storage:
                 storage = get_default_storage()
                 if not storage:
-                    # Auto-detect suitable storage
+                    # Auto-detect suitable storage (preferring shared storage)
                     try:
                         from .storage_service import StorageService
                         storage_service = StorageService(self.proxmox)
                         suitable_storages = storage_service.get_suitable_storage(node, "images", min_free_gb=1)
                         if suitable_storages:
                             storage = suitable_storages[0]['storage']
+                            storage_type = "shared" if suitable_storages[0]['shared'] else "local"
+                            logger.info(f"Auto-selected {storage_type} storage '{storage}' for VM {vmid} on {node}")
                         else:
                             storage = "local-lvm"  # Ultimate fallback
-                    except Exception:
+                            logger.warning(f"No suitable storage found for VM {vmid}, using fallback: {storage}")
+                    except Exception as e:
                         storage = "local-lvm"  # Ultimate fallback
+                        logger.warning(f"Storage auto-detection failed for VM {vmid}: {e}, using fallback: {storage}")
             
             # Determine the correct disk format based on storage type
             disk_format = "raw"  # Default for LVM, ZFS, etc.
@@ -169,17 +173,21 @@ class VMService(BaseProxmoxService):
             if not storage:
                 storage = get_default_storage()
                 if not storage:
-                    # Auto-detect suitable storage
+                    # Auto-detect suitable storage (preferring shared storage)
                     try:
                         from .storage_service import StorageService
                         storage_service = StorageService(self.proxmox)
                         suitable_storages = storage_service.get_suitable_storage(node, "rootdir", min_free_gb=1)
                         if suitable_storages:
                             storage = suitable_storages[0]['storage']
+                            storage_type = "shared" if suitable_storages[0]['shared'] else "local"
+                            logger.info(f"Auto-selected {storage_type} storage '{storage}' for container {vmid} on {node}")
                         else:
                             storage = "local-lvm"  # Ultimate fallback
-                    except Exception:
+                            logger.warning(f"No suitable storage found for container {vmid}, using fallback: {storage}")
+                    except Exception as e:
                         storage = "local-lvm"  # Ultimate fallback
+                        logger.warning(f"Storage auto-detection failed for container {vmid}: {e}, using fallback: {storage}")
             
             config = {
                 'vmid': int(vmid),

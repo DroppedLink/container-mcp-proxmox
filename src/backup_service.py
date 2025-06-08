@@ -4,17 +4,23 @@ Backup and restore service.
 import logging
 from typing import Dict, Any, List
 from .base_service import BaseProxmoxService
+from .config import DEFAULT_BACKUP_COMPRESSION, DEFAULT_BACKUP_MODE, DEFAULT_BACKUP_STORAGE
 
 logger = logging.getLogger(__name__)
 
 class BackupService(BaseProxmoxService):
     """Service for backup and restore operations."""
     
-    def create_backup(self, vmid: str, node: str, storage: str = "local",
-                     compress: str = "zstd", mode: str = "snapshot",
+    def create_backup(self, vmid: str, node: str, storage: str = "",
+                     compress: str = "", mode: str = "",
                      notes: str = "") -> Dict[str, Any]:
         """Create a backup of a VM or container."""
         try:
+            # Use config defaults if not specified
+            storage = storage or DEFAULT_BACKUP_STORAGE
+            compress = compress or DEFAULT_BACKUP_COMPRESSION
+            mode = mode or DEFAULT_BACKUP_MODE
+            
             config = {
                 'vmid': vmid,
                 'storage': storage,

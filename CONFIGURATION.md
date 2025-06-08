@@ -33,6 +33,10 @@ MCP_PORT=8001                 # Server port
 # Proxmox Infrastructure Defaults
 PROXMOX_DEFAULT_STORAGE=local-lvm    # Default storage for VMs/containers
 PROXMOX_DEFAULT_BRIDGE=vmbr0         # Default network bridge
+
+# Storage Preferences  
+PROXMOX_PREFER_SHARED_STORAGE=true   # Prioritize shared storage (default: true)
+PROXMOX_ALLOW_LOCAL_STORAGE=false    # Allow local storage as fallback (default: false)
 ```
 
 #### Optional Test Configuration
@@ -87,8 +91,23 @@ When no storage is specified, the server automatically:
 
 1. Checks `PROXMOX_DEFAULT_STORAGE` environment variable
 2. If not set, finds suitable storage using `get_suitable_storage()`
-3. Selects storage with most available space for the content type
-4. Falls back to `local-lvm` if auto-detection fails
+3. **Prioritizes shared storage** for cluster mobility (configurable)
+4. Selects storage with most available space for the content type
+5. Falls back to `local-lvm` if auto-detection fails
+
+### Shared Storage Priority
+
+By default, the system **prefers shared storage** to ensure VMs/containers can be migrated between nodes:
+
+- **Shared storage** (NFS, CIFS, iSCSI, etc.) is selected first
+- **Local storage** (local-lvm, local directories) is only used if:
+  - `PROXMOX_ALLOW_LOCAL_STORAGE=true` is set
+  - No suitable shared storage is available
+
+#### Storage Types
+- **Shared**: NFS, CIFS/SMB, iSCSI, FC, Ceph, GlusterFS
+- **Local**: local-lvm, local-zfs, local directories
+- **Best Practice**: Use shared storage in production clusters
 
 ### Disk Format Selection
 

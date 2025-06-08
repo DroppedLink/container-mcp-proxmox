@@ -365,8 +365,8 @@ async def resize_resource(vmid: str, node: str, cores: int = 0, memory: int = 0,
 # === Backup and Restore Tools ===
 
 @mcp.tool()
-async def create_backup(vmid: str, node: str, storage: str = "local", mode: str = "snapshot", 
-                       compress: str = "zstd", notes: str = "") -> str:
+async def create_backup(vmid: str, node: str, storage: str = "", mode: str = "", 
+                       compress: str = "", notes: str = "") -> str:
     """Create a backup of a VM or container"""
     try:
         result = await (await get_service()).create_backup(vmid, node, storage, mode, compress, notes)
@@ -867,16 +867,17 @@ if __name__ == "__main__":
             print("  PROXMOX_PASSWORD   Proxmox VE password")
             print()
             print("Environment variables optional:")
-            print("  MCP_PORT          Server port (default: 8000)")
-            print("  MCP_HOST          Server host (default: localhost)")
+            print(f"  MCP_PORT          Server port (default: {DEFAULT_MCP_PORT})")
+            print(f"  MCP_HOST          Server host (default: {DEFAULT_MCP_HOST})")
             sys.exit(0)
         else:
             print(f"Unknown argument: {sys.argv[i]}")
             sys.exit(1)
     
     # Get port from environment or use default
-    port = os.getenv("MCP_PORT", "8000")
-    host = os.getenv("MCP_HOST", "localhost")
+    from src.config import DEFAULT_MCP_PORT, DEFAULT_MCP_HOST
+    port = os.getenv("MCP_PORT", str(DEFAULT_MCP_PORT))
+    host = os.getenv("MCP_HOST", DEFAULT_MCP_HOST)
     
     logger.info(f"🚀 Starting Proxmox MCP Server on {host}:{port}")
     logger.info("💡 Set MCP_PORT and MCP_HOST environment variables to customize")
