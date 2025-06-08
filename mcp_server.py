@@ -274,7 +274,7 @@ async def init_service():
 
 @mcp.tool()
 async def create_vm(vmid: str, node: str, name: str, cores: int = 1, memory: int = 512, 
-                   disk_size: str = "8G", storage: str = "local-lvm", iso_image: str = "", 
+                   disk_size: str = "8G", storage: str = "", iso_image: str = "", 
                    os_type: str = "l26", start_after_create: bool = False) -> str:
     """Create a new VM"""
     try:
@@ -294,7 +294,7 @@ async def create_vm(vmid: str, node: str, name: str, cores: int = 1, memory: int
 
 @mcp.tool()
 async def create_container(vmid: str, node: str, hostname: str, cores: int = 1, memory: int = 512,
-                          rootfs_size: str = "8G", storage: str = "local-lvm", template: str = "",
+                          rootfs_size: str = "8G", storage: str = "", template: str = "",
                           password: str = "", unprivileged: bool = True, start_after_create: bool = False) -> str:
     """Create a new LXC container"""
     try:

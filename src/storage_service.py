@@ -74,7 +74,23 @@ class StorageService(BaseProxmoxService):
         """Get detailed status of a specific storage."""
         try:
             # Get storage configuration
-            storage_config = self.proxmox.nodes(node).storage(storage_name).get()
+            storage_config_raw = self.proxmox.nodes(node).storage(storage_name).get()
+            
+            # Handle case where API returns list instead of dict
+            storage_config = {}
+            if isinstance(storage_config_raw, list):
+                # If it's a list, find the matching storage entry
+                for config in storage_config_raw:
+                    if isinstance(config, dict) and config.get('storage') == storage_name:
+                        storage_config = config
+                        break
+                if not storage_config and storage_config_raw:
+                    storage_config = storage_config_raw[0] if isinstance(storage_config_raw[0], dict) else {}
+            elif isinstance(storage_config_raw, dict):
+                storage_config = storage_config_raw
+            else:
+                logger.warning(f"Unexpected storage config format for {storage_name}: {type(storage_config_raw)}")
+                storage_config = {}
             
             # Get storage status
             storage_status = {}

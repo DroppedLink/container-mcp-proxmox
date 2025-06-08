@@ -4,6 +4,12 @@ VM and Container management service.
 import logging
 from typing import Dict, Any
 from .base_service import BaseProxmoxService
+from .config import (
+    DEFAULT_VM_CORES, DEFAULT_VM_MEMORY, DEFAULT_VM_DISK_SIZE, DEFAULT_VM_OS_TYPE,
+    DEFAULT_SCSI_HARDWARE, DEFAULT_VM_NETWORK, DEFAULT_CONTAINER_CORES,
+    DEFAULT_CONTAINER_MEMORY, DEFAULT_CONTAINER_ROOTFS_SIZE, DEFAULT_CONTAINER_NETWORK,
+    get_default_storage
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,12 +80,34 @@ class VMService(BaseProxmoxService):
             logger.error(f"Failed to restart {vmid}: {e}")
             raise
     
-    def create_vm(self, vmid: str, node: str, name: str, cores: int = 1, 
-                  memory: int = 512, disk_size: str = "8G", 
-                  iso_image: str = "", storage: str = "local-lvm",
-                  os_type: str = "l26", start_after_create: bool = False) -> Dict[str, Any]:
+    def create_vm(self, vmid: str, node: str, name: str, cores: int = None, 
+                  memory: int = None, disk_size: str = None, 
+                  iso_image: str = "", storage: str = None,
+                  os_type: str = None, start_after_create: bool = False) -> Dict[str, Any]:
         """Create a new VM."""
         try:
+            # Use defaults from config if not specified
+            cores = cores or DEFAULT_VM_CORES
+            memory = memory or DEFAULT_VM_MEMORY
+            disk_size = disk_size or DEFAULT_VM_DISK_SIZE
+            os_type = os_type or DEFAULT_VM_OS_TYPE
+            
+            # Auto-detect storage if not specified
+            if not storage:
+                storage = get_default_storage()
+                if not storage:
+                    # Auto-detect suitable storage
+                    try:
+                        from .storage_service import StorageService
+                        storage_service = StorageService(self.proxmox)
+                        suitable_storages = storage_service.get_suitable_storage(node, "images", min_free_gb=1)
+                        if suitable_storages:
+                            storage = suitable_storages[0]['storage']
+                        else:
+                            storage = "local-lvm"  # Ultimate fallback
+                    except Exception:
+                        storage = "local-lvm"  # Ultimate fallback
+            
             # Determine the correct disk format based on storage type
             disk_format = "raw"  # Default for LVM, ZFS, etc.
             try:
@@ -102,9 +130,9 @@ class VMService(BaseProxmoxService):
                 'cores': cores,
                 'memory': memory,
                 'ostype': os_type,
-                'scsihw': 'virtio-scsi-pci',
+                'scsihw': DEFAULT_SCSI_HARDWARE,
                 'scsi0': f'{storage}:{disk_size},format={disk_format}',
-                'net0': 'virtio,bridge=vmbr0'
+                'net0': DEFAULT_VM_NETWORK
             }
             
             if iso_image:
@@ -125,20 +153,41 @@ class VMService(BaseProxmoxService):
             logger.error(f"Failed to create VM {vmid}: {e}")
             raise
     
-    def create_container(self, vmid: str, node: str, hostname: str, cores: int = 1,
-                        memory: int = 512, rootfs_size: str = "8G",
-                        storage: str = "local-lvm", template: str = "",
+    def create_container(self, vmid: str, node: str, hostname: str, cores: int = None,
+                        memory: int = None, rootfs_size: str = None,
+                        storage: str = None, template: str = "",
                         password: str = "", unprivileged: bool = True,
                         start_after_create: bool = False) -> Dict[str, Any]:
         """Create a new LXC container."""
         try:
+            # Use defaults from config if not specified
+            cores = cores or DEFAULT_CONTAINER_CORES
+            memory = memory or DEFAULT_CONTAINER_MEMORY
+            rootfs_size = rootfs_size or DEFAULT_CONTAINER_ROOTFS_SIZE
+            
+            # Auto-detect storage if not specified
+            if not storage:
+                storage = get_default_storage()
+                if not storage:
+                    # Auto-detect suitable storage
+                    try:
+                        from .storage_service import StorageService
+                        storage_service = StorageService(self.proxmox)
+                        suitable_storages = storage_service.get_suitable_storage(node, "rootdir", min_free_gb=1)
+                        if suitable_storages:
+                            storage = suitable_storages[0]['storage']
+                        else:
+                            storage = "local-lvm"  # Ultimate fallback
+                    except Exception:
+                        storage = "local-lvm"  # Ultimate fallback
+            
             config = {
                 'vmid': int(vmid),
                 'hostname': hostname,
                 'cores': cores,
                 'memory': memory,
                 'rootfs': f'{storage}:{rootfs_size}',
-                'net0': 'name=eth0,bridge=vmbr0,ip=dhcp',
+                'net0': DEFAULT_CONTAINER_NETWORK,
                 'unprivileged': 1 if unprivileged else 0
             }
             
@@ -211,7 +260,9 @@ class VMService(BaseProxmoxService):
                 if memory > 0:
                     config['memory'] = memory
                 if disk_size:
-                    config['rootfs'] = f"local-lvm:{disk_size}"
+                    # Try to detect storage or use default
+                    default_storage = get_default_storage() or "local-lvm"
+                    config['rootfs'] = f"{default_storage}:{disk_size}"
                 
                 if config:
                     self.proxmox.nodes(node).lxc(vmid).config.put(**config)

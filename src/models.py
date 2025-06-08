@@ -48,22 +48,22 @@ class CreateVMParams(BaseModel):
     vmid: str
     node: str
     name: str
-    cores: Optional[int] = 1
-    memory: Optional[int] = 512  # MB
-    disk_size: Optional[str] = "8G"
-    storage: Optional[str] = "local-lvm"
+    cores: Optional[int] = None
+    memory: Optional[int] = None  # MB
+    disk_size: Optional[str] = None
+    storage: Optional[str] = None
     iso_image: Optional[str] = None
-    os_type: Optional[str] = "l26"  # Linux 2.6+
+    os_type: Optional[str] = None  # Linux 2.6+
     start_after_create: Optional[bool] = False
 
 class CreateCTParams(BaseModel):
     vmid: str
     node: str
     hostname: str
-    cores: Optional[int] = 1
-    memory: Optional[int] = 512  # MB
-    rootfs_size: Optional[str] = "8G"
-    storage: Optional[str] = "local-lvm"
+    cores: Optional[int] = None
+    memory: Optional[int] = None  # MB
+    rootfs_size: Optional[str] = None
+    storage: Optional[str] = None
     template: Optional[str] = None
     password: Optional[str] = None
     unprivileged: Optional[bool] = True
