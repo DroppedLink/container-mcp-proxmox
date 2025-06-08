@@ -7,11 +7,13 @@ A standards-compliant Model Context Protocol (MCP) server for managing Proxmox V
 - **SSE Transport Only**: Optimized for web clients like Cursor IDE
 - **Full MCP Protocol Support**: Built with the official MCP Python SDK
 - **Comprehensive Proxmox Management**:
-  - List all VMs and containers
-  - Get detailed resource status
-  - Start, stop, shutdown, and restart resources
-  - Create and manage snapshots
-  - Monitor cluster and node status
+  - **VM/Container Lifecycle**: Create, delete, start, stop, restart VMs and containers
+  - **Resource Management**: Resize CPU, RAM, and disk resources dynamically
+  - **Backup & Restore**: Full backup/restore operations with compression options
+  - **Template & Cloning**: Convert VMs to templates and clone them
+  - **Snapshot Management**: Create, delete, and list VM snapshots
+  - **User & Permissions**: Manage users, roles, and access control
+  - **Monitoring**: Get detailed resource status and cluster health
 
 ## Prerequisites
 
@@ -91,6 +93,7 @@ The server exposes the standard MCP endpoints:
 
 ## Available Tools
 
+### Core VM/Container Management
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_resources` | List all VMs and containers | None |
@@ -99,9 +102,49 @@ The server exposes the standard MCP endpoints:
 | `stop_resource` | Stop a VM/container | `vmid`, `node` |
 | `shutdown_resource` | Gracefully shutdown | `vmid`, `node` |
 | `restart_resource` | Restart a VM/container | `vmid`, `node` |
+
+### VM/Container Creation & Deletion
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `create_vm` | Create a new VM | `vmid`, `node`, `name`, `cores?`, `memory?`, `disk_size?`, `storage?`, `iso_image?`, `os_type?`, `start_after_create?` |
+| `create_container` | Create a new LXC container | `vmid`, `node`, `hostname`, `cores?`, `memory?`, `rootfs_size?`, `storage?`, `template?`, `password?`, `unprivileged?`, `start_after_create?` |
+| `delete_resource` | Delete a VM or container | `vmid`, `node`, `force?` |
+
+### Resource Management
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `resize_resource` | Resize VM/container (CPU, RAM, disk) | `vmid`, `node`, `cores?`, `memory?`, `disk_size?` |
+
+### Snapshot Management
+| Tool | Description | Parameters |
+|------|-------------|------------|
 | `create_snapshot` | Create VM snapshot | `vmid`, `node`, `snapname`, `description?` |
 | `delete_snapshot` | Delete VM snapshot | `vmid`, `node`, `snapname` |
 | `get_snapshots` | List VM snapshots | `vmid`, `node` |
+
+### Backup & Restore
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `create_backup` | Create VM/container backup | `vmid`, `node`, `storage?`, `mode?`, `compress?`, `notes?` |
+| `list_backups` | List available backups | `node?`, `storage?` |
+| `restore_backup` | Restore from backup | `archive`, `vmid`, `node`, `storage?`, `force?` |
+
+### Template & Clone Management  
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `create_template` | Convert VM to template | `vmid`, `node` |
+| `clone_vm` | Clone VM or template | `vmid`, `newid`, `node`, `name?`, `target_node?`, `full_clone?`, `storage?` |
+| `list_templates` | List all VM templates | None |
+
+### User & Permission Management
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `create_user` | Create new Proxmox user | `userid`, `password?`, `email?`, `firstname?`, `lastname?`, `groups?`, `enable?` |
+| `delete_user` | Delete Proxmox user | `userid` |
+| `list_users` | List all users | None |
+| `set_permissions` | Set user/group permissions | `path`, `roleid`, `userid?`, `groupid?`, `propagate?` |
+| `list_roles` | List available roles | None |
+| `list_permissions` | List current permissions | None |
 
 ## Available Resources
 
@@ -112,12 +155,43 @@ The server exposes the standard MCP endpoints:
 
 ## Example Usage in Cursor IDE
 
-Once configured, you can ask Cursor IDE:
+Once configured, you can ask Cursor IDE to perform complex Proxmox operations:
 
-- "List all my Proxmox VMs"
+### Basic Operations
+- "List all my Proxmox VMs and containers"
 - "Show me the status of VM 100"
-- "Create a snapshot called 'backup-2024' for VM 100"
+- "Start VM 101 and show me its status"
 - "What's the current cluster status?"
+
+### VM/Container Creation
+- "Create a new VM with ID 200 on node pve1, name 'web-server', 2 cores, 2GB RAM"
+- "Create a container with ID 300 on node pve2, hostname 'app-container'"
+- "Delete VM 199 (use force if needed)"
+
+### Resource Management
+- "Resize VM 100 to have 4 cores and 4GB RAM"
+- "Expand the disk of VM 100 by 10GB"
+
+### Backup & Restore
+- "Create a backup of VM 100 on node pve1"
+- "List all available backups"
+- "Restore VM from backup '/var/lib/vz/dump/vzdump-qemu-100-2024_01_01-10_00_00.vma.zst'"
+
+### Templates & Cloning
+- "Convert VM 100 to a template"
+- "Clone template 100 to create new VM 201 named 'web-clone'"
+- "List all available templates"
+
+### Snapshots
+- "Create a snapshot called 'before-update' for VM 100"
+- "List all snapshots for VM 100"
+- "Delete snapshot 'old-snap' from VM 100"
+
+### User Management
+- "Create a user 'john@pve' with email 'john@company.com'"
+- "List all Proxmox users"
+- "Set permissions for user 'john@pve' on path '/vms/100' with role 'PVEVMUser'"
+- "List all available roles and permissions"
 
 ## Troubleshooting
 

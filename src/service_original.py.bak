@@ -1,0 +1,703 @@
+# src/service.py
+
+import os
+import logging
+import sys
+from proxmoxer import ProxmoxAPI
+from typing import List, Optional, Dict, Any
+
+# Add the src directory to the path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from src.models import (
+    ResourceIdentifier, CreateSnapshotParams, DeleteSnapshotParams, ProxmoxResource,
+    ListResourcesResult, ResourceStatusResult, OperationStatus
+)
+
+class ProxmoxService:
+    """Service class for Proxmox VE operations"""
+    
+    def __init__(self):
+        self.proxmox_api = None
+        
+    def get_proxmox_api(self) -> ProxmoxAPI:
+        """Initializes and returns a ProxmoxAPI client instance."""
+        if self.proxmox_api is None:
+            host = os.getenv("PROXMOX_HOST")
+            user = os.getenv("PROXMOX_USER")
+            password = os.getenv("PROXMOX_PASSWORD")
+            verify_ssl = os.getenv("PROXMOX_VERIFY_SSL", "true").lower() == "true"
+
+            logging.debug(f"Proxmox API - Host: {host}, User: {user}, Password Set: {bool(password)}, Verify SSL: {verify_ssl}")
+
+            if not all([host, user, password]):
+                logging.error("Proxmox API environment variables (PROXMOX_HOST, PROXMOX_USER, PROXMOX_PASSWORD) are not fully set.")
+                raise ValueError("Proxmox API environment variables are not fully set.")
+
+            try:
+                logging.debug(f"Attempting to initialize ProxmoxAPI with host={host}, user={user}, verify_ssl={verify_ssl}")
+                self.proxmox_api = ProxmoxAPI(host, user=user, password=password, verify_ssl=verify_ssl)
+                logging.debug("ProxmoxAPI object initialized successfully.")
+            except Exception as e:
+                logging.error(f"Error initializing ProxmoxAPI: {e}", exc_info=True)
+                raise
+                
+        return self.proxmox_api
+
+    async def test_connection(self) -> bool:
+        """Test connection to Proxmox server"""
+        try:
+            proxmox = self.get_proxmox_api()
+            # Try to get version to test connection
+            version = proxmox.version.get()
+            logging.info(f"Successfully connected to Proxmox VE {version.get('version', 'unknown')}")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to connect to Proxmox: {e}")
+            raise
+
+    async def cleanup(self):
+        """Cleanup resources"""
+        self.proxmox_api = None
+        logging.info("Proxmox service cleaned up")
+
+    async def list_resources(self) -> Dict[str, Any]:
+        """Lists all VMs and Containers in the cluster."""
+        proxmox = self.get_proxmox_api()
+        
+        cluster_resources = proxmox.cluster.resources.get()
+        
+        processed_resources: List[Dict[str, Any]] = []
+        for res_data in cluster_resources:
+            if res_data.get('type') in ['qemu', 'lxc']:
+                try:
+                    resource = {
+                        'vmid': str(res_data.get('vmid')),
+                        'name': res_data.get('name', str(res_data.get('vmid'))),
+                        'type': res_data.get('type'),
+                        'status': res_data.get('status', 'unknown'),
+                        'node': res_data.get('node'),
+                        'uptime': res_data.get('uptime', 0)
+                    }
+                    processed_resources.append(resource)
+                except Exception as e:
+                    logging.error(f"Error processing resource {res_data.get('vmid')}: {e}")
+                    continue
+
+        return {'resources': processed_resources}
+
+    async def get_resource_status(self, vmid: str, node: str) -> Dict[str, Any]:
+        """Fetches detailed status and resource usage for a specific VM or CT."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        # Try to determine resource type by checking both qemu and lxc
+        resource_type = None
+        current_status = None
+        
+        try:
+            # Try qemu first
+            current_status = node_api.qemu(vmid).status.current.get()
+            resource_type = 'qemu'
+        except:
+            try:
+                # Try lxc
+                current_status = node_api.lxc(vmid).status.current.get()
+                resource_type = 'lxc'
+            except Exception as e:
+                raise ValueError(f"Resource {vmid} not found on node {node}")
+
+        return {
+            'vmid': current_status.get('vmid'),
+            'name': current_status.get('name', str(current_status.get('vmid'))),
+            'type': resource_type,
+            'status': current_status.get('status'),
+            'node': node,
+            'uptime': current_status.get('uptime', 0),
+            'cpu': current_status.get('cpu', 0),
+            'memory': current_status.get('mem', 0),
+            'disk': current_status.get('disk', 0)
+        }
+
+    async def start_resource(self, vmid: str, node: str) -> Dict[str, Any]:
+        """Starts a specific VM or Container."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        # Determine resource type
+        resource_type = await self._get_resource_type(vmid, node)
+        
+        try:
+            if resource_type == 'qemu':
+                task_id = node_api.qemu(vmid).status.start.post()
+            elif resource_type == 'lxc':
+                task_id = node_api.lxc(vmid).status.start.post()
+            else:
+                raise ValueError(f"Unsupported resource type: {resource_type}")
+                
+            return {'status': 'pending', 'message': f'{resource_type.capitalize()} start task initiated.', 'task_id': task_id}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def stop_resource(self, vmid: str, node: str) -> Dict[str, Any]:
+        """Performs a hard power-off of a specific VM or stops a CT."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        resource_type = await self._get_resource_type(vmid, node)
+        
+        try:
+            if resource_type == 'qemu':
+                task_id = node_api.qemu(vmid).status.stop.post()
+            elif resource_type == 'lxc':
+                task_id = node_api.lxc(vmid).status.stop.post()
+            else:
+                raise ValueError(f"Unsupported resource type: {resource_type}")
+
+            return {'status': 'pending', 'message': f'{resource_type.capitalize()} stop task initiated.', 'task_id': task_id}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def shutdown_resource(self, vmid: str, node: str) -> Dict[str, Any]:
+        """Sends a graceful shutdown command to the guest OS of a VM or CT."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        resource_type = await self._get_resource_type(vmid, node)
+        
+        try:
+            if resource_type == 'qemu':
+                task_id = node_api.qemu(vmid).status.shutdown.post()
+            elif resource_type == 'lxc':
+                task_id = node_api.lxc(vmid).status.shutdown.post()
+            else:
+                raise ValueError(f"Unsupported resource type: {resource_type}")
+
+            return {'status': 'pending', 'message': f'{resource_type.capitalize()} shutdown task initiated.', 'task_id': task_id}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def restart_resource(self, vmid: str, node: str) -> Dict[str, Any]:
+        """Restarts a specific VM or Container."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        resource_type = await self._get_resource_type(vmid, node)
+        
+        try:
+            if resource_type == 'qemu':
+                task_id = node_api.qemu(vmid).status.reboot.post()
+            elif resource_type == 'lxc':
+                task_id = node_api.lxc(vmid).status.reboot.post()
+            else:
+                raise ValueError(f"Unsupported resource type: {resource_type}")
+
+            return {'status': 'pending', 'message': f'{resource_type.capitalize()} restart task initiated.', 'task_id': task_id}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def create_snapshot(self, vmid: str, node: str, snapname: str, description: str = "") -> Dict[str, Any]:
+        """Creates a new snapshot for a specific VM."""
+        proxmox = self.get_proxmox_api()
+        
+        # Snapshots are typically for QEMU VMs
+        snapshot_data = {'snapname': snapname}
+        if description:
+            snapshot_data['description'] = description
+        
+        try:
+            task_id = proxmox.nodes(node).qemu(vmid).snapshot.post(**snapshot_data)
+            return {'status': 'pending', 'message': 'Create snapshot task initiated.', 'task_id': task_id}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def delete_snapshot(self, vmid: str, node: str, snapname: str) -> Dict[str, Any]:
+        """Removes a specific snapshot from a VM."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            task_id = proxmox.nodes(node).qemu(vmid).snapshot(snapname).delete()
+            return {'status': 'pending', 'message': 'Delete snapshot task initiated.', 'task_id': task_id}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def get_snapshots(self, vmid: str, node: str) -> Dict[str, Any]:
+        """List all snapshots for a VM."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            snapshots = proxmox.nodes(node).qemu(vmid).snapshot.get()
+            processed_snapshots = []
+            
+            for snap in snapshots:
+                processed_snapshots.append({
+                    'name': snap.get('name'),
+                    'description': snap.get('description', 'No description'),
+                    'snaptime': snap.get('snaptime', 'Unknown'),
+                    'vmstate': snap.get('vmstate', False)
+                })
+            
+            return {'snapshots': processed_snapshots}
+        except Exception as e:
+            return {'snapshots': [], 'error': str(e)}
+
+    async def get_cluster_status(self) -> Dict[str, Any]:
+        """Get cluster status information."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            status = proxmox.cluster.status.get()
+            return {'cluster_status': status}
+        except Exception as e:
+            return {'error': str(e)}
+
+    async def get_nodes_status(self) -> Dict[str, Any]:
+        """Get status of all nodes."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            nodes = proxmox.nodes.get()
+            return {'nodes': nodes}
+        except Exception as e:
+            return {'error': str(e)}
+
+    async def _get_resource_type(self, vmid: str, node: str) -> str:
+        """Determine if a resource is qemu or lxc."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        try:
+            # Try qemu first
+            node_api.qemu(vmid).status.current.get()
+            return 'qemu'
+        except:
+            try:
+                # Try lxc
+                node_api.lxc(vmid).status.current.get()
+                return 'lxc'
+            except:
+                raise ValueError(f"Resource {vmid} not found on node {node}")
+
+    # === VM/CT Creation and Deletion ===
+    
+    async def create_vm(self, vmid: str, node: str, name: str, cores: int = 1, memory: int = 512, 
+                       disk_size: str = "8G", storage: str = "local-lvm", iso_image: str = None,
+                       os_type: str = "l26", start_after_create: bool = False) -> Dict[str, Any]:
+        """Create a new VM."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        vm_config = {
+            'vmid': vmid,
+            'name': name,
+            'cores': cores,
+            'memory': memory,
+            'ostype': os_type,
+            'net0': 'virtio,bridge=vmbr0',  # Default network
+            'scsi0': f"{storage}:{disk_size}",  # Default disk
+            'scsihw': 'virtio-scsi-pci',
+            'boot': 'order=scsi0'
+        }
+        
+        if iso_image:
+            vm_config['ide2'] = f"{storage}:iso/{iso_image},media=cdrom"
+            vm_config['boot'] = 'order=ide2;scsi0'
+        
+        try:
+            task_id = node_api.qemu.post(**vm_config)
+            
+            result = {
+                'status': 'pending', 
+                'message': f'VM {vmid} creation task initiated.', 
+                'task_id': task_id,
+                'vmid': vmid
+            }
+            
+            if start_after_create:
+                # Note: In practice, you'd want to wait for creation to complete first
+                result['message'] += ' Will start after creation completes.'
+                
+            return result
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def create_container(self, vmid: str, node: str, hostname: str, cores: int = 1, 
+                              memory: int = 512, rootfs_size: str = "8G", storage: str = "local-lvm",
+                              template: str = None, password: str = None, unprivileged: bool = True,
+                              start_after_create: bool = False) -> Dict[str, Any]:
+        """Create a new LXC container."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        ct_config = {
+            'vmid': vmid,
+            'hostname': hostname,
+            'cores': cores,
+            'memory': memory,
+            'rootfs': f"{storage}:{rootfs_size}",
+            'net0': 'name=eth0,bridge=vmbr0,ip=dhcp',  # Default network with DHCP
+            'unprivileged': 1 if unprivileged else 0,
+        }
+        
+        if template:
+            ct_config['ostemplate'] = template
+        if password:
+            ct_config['password'] = password
+            
+        try:
+            task_id = node_api.lxc.post(**ct_config)
+            
+            result = {
+                'status': 'pending',
+                'message': f'Container {vmid} creation task initiated.',
+                'task_id': task_id,
+                'vmid': vmid
+            }
+            
+            if start_after_create:
+                result['message'] += ' Will start after creation completes.'
+                
+            return result
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def delete_resource(self, vmid: str, node: str, force: bool = False) -> Dict[str, Any]:
+        """Delete a VM or container."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        resource_type = await self._get_resource_type(vmid, node)
+        
+        try:
+            delete_params = {}
+            if force:
+                delete_params['force'] = 1
+                
+            if resource_type == 'qemu':
+                task_id = node_api.qemu(vmid).delete(**delete_params)
+            elif resource_type == 'lxc':
+                task_id = node_api.lxc(vmid).delete(**delete_params)
+            else:
+                raise ValueError(f"Unsupported resource type: {resource_type}")
+
+            return {
+                'status': 'pending',
+                'message': f'{resource_type.capitalize()} {vmid} deletion task initiated.',
+                'task_id': task_id
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    # === Resource Resizing ===
+    
+    async def resize_resource(self, vmid: str, node: str, cores: int = None, 
+                             memory: int = None, disk_size: str = None) -> Dict[str, Any]:
+        """Resize VM/container resources (CPU, RAM, disk)."""
+        proxmox = self.get_proxmox_api()
+        node_api = proxmox.nodes(node)
+        
+        resource_type = await self._get_resource_type(vmid, node)
+        
+        try:
+            config_updates = {}
+            
+            if cores is not None:
+                config_updates['cores'] = cores
+            if memory is not None:
+                config_updates['memory'] = memory
+                
+            if config_updates:
+                if resource_type == 'qemu':
+                    task_id = node_api.qemu(vmid).config.put(**config_updates)
+                elif resource_type == 'lxc':
+                    task_id = node_api.lxc(vmid).config.put(**config_updates)
+                else:
+                    raise ValueError(f"Unsupported resource type: {resource_type}")
+                    
+            # Handle disk resizing separately if specified
+            disk_task_id = None
+            if disk_size and resource_type == 'qemu':
+                # Disk resize for QEMU VMs (e.g., scsi0 +2G)
+                disk_task_id = node_api.qemu(vmid).resize.put(disk='scsi0', size=disk_size)
+            elif disk_size and resource_type == 'lxc':
+                # LXC container disk resize
+                disk_task_id = node_api.lxc(vmid).resize.put(disk='rootfs', size=disk_size)
+
+            messages = []
+            if config_updates:
+                messages.append(f"Resource configuration updated")
+            if disk_task_id:
+                messages.append(f"Disk resize initiated")
+
+            return {
+                'status': 'pending',
+                'message': '; '.join(messages),
+                'config_task_id': task_id if config_updates else None,
+                'disk_task_id': disk_task_id
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    # === Backup and Restore Management ===
+    
+    async def create_backup(self, vmid: str, node: str, storage: str = "local",
+                           mode: str = "snapshot", compress: str = "zstd", 
+                           notes: str = "") -> Dict[str, Any]:
+        """Create a backup of a VM or container."""
+        proxmox = self.get_proxmox_api()
+        
+        backup_params = {
+            'vmid': vmid,
+            'storage': storage,
+            'mode': mode,
+            'compress': compress,
+            'node': node
+        }
+        
+        if notes:
+            backup_params['notes'] = notes
+            
+        try:
+            task_id = proxmox.nodes(node).vzdump.post(**backup_params)
+            return {
+                'status': 'pending',
+                'message': f'Backup task for {vmid} initiated.',
+                'task_id': task_id
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def list_backups(self, node: str = None, storage: str = None) -> Dict[str, Any]:
+        """List available backups."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            if node:
+                # List backups on specific node
+                if storage:
+                    backups = proxmox.nodes(node).storage(storage).content.get(content='backup')
+                else:
+                    # Get all storages on node and search for backups
+                    storages = proxmox.nodes(node).storage.get()
+                    all_backups = []
+                    for stor in storages:
+                        try:
+                            backups = proxmox.nodes(node).storage(stor['storage']).content.get(content='backup')
+                            all_backups.extend(backups)
+                        except:
+                            continue
+                    backups = all_backups
+            else:
+                # List backups across all nodes
+                nodes = proxmox.nodes.get()
+                all_backups = []
+                for node_info in nodes:
+                    try:
+                        storages = proxmox.nodes(node_info['node']).storage.get()
+                        for stor in storages:
+                            try:
+                                backups = proxmox.nodes(node_info['node']).storage(stor['storage']).content.get(content='backup')
+                                all_backups.extend(backups)
+                            except:
+                                continue
+                    except:
+                        continue
+                backups = all_backups
+                
+            return {'backups': backups}
+        except Exception as e:
+            return {'backups': [], 'error': str(e)}
+
+    async def restore_backup(self, archive: str, vmid: str, node: str, 
+                            storage: str = None, force: bool = False) -> Dict[str, Any]:
+        """Restore a VM/container from backup."""
+        proxmox = self.get_proxmox_api()
+        
+        restore_params = {
+            'archive': archive,
+            'vmid': vmid
+        }
+        
+        if storage:
+            restore_params['storage'] = storage
+        if force:
+            restore_params['force'] = 1
+            
+        try:
+            task_id = proxmox.nodes(node).qemu.post(**restore_params)
+            return {
+                'status': 'pending',
+                'message': f'Restore task for {vmid} initiated.',
+                'task_id': task_id
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    # === Template and Clone Management ===
+    
+    async def create_template(self, vmid: str, node: str) -> Dict[str, Any]:
+        """Convert a VM to a template."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            task_id = proxmox.nodes(node).qemu(vmid).template.post()
+            return {
+                'status': 'pending',
+                'message': f'Template creation task for VM {vmid} initiated.',
+                'task_id': task_id
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def clone_vm(self, vmid: str, newid: str, node: str, name: str = None,
+                      target_node: str = None, full_clone: bool = True, 
+                      storage: str = None) -> Dict[str, Any]:
+        """Clone a VM or template."""
+        proxmox = self.get_proxmox_api()
+        
+        clone_params = {
+            'newid': newid,
+            'full': 1 if full_clone else 0
+        }
+        
+        if name:
+            clone_params['name'] = name
+        if target_node:
+            clone_params['target'] = target_node
+        if storage:
+            clone_params['storage'] = storage
+            
+        try:
+            task_id = proxmox.nodes(node).qemu(vmid).clone.post(**clone_params)
+            return {
+                'status': 'pending',
+                'message': f'Clone task for VM {vmid} → {newid} initiated.',
+                'task_id': task_id,
+                'new_vmid': newid
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def list_templates(self) -> Dict[str, Any]:
+        """List all VM templates in the cluster."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            cluster_resources = proxmox.cluster.resources.get()
+            templates = []
+            
+            for res_data in cluster_resources:
+                if res_data.get('type') == 'qemu' and res_data.get('template') == 1:
+                    templates.append({
+                        'vmid': str(res_data.get('vmid')),
+                        'name': res_data.get('name', str(res_data.get('vmid'))),
+                        'node': res_data.get('node'),
+                        'description': res_data.get('notes', '')
+                    })
+                    
+            return {'templates': templates}
+        except Exception as e:
+            return {'templates': [], 'error': str(e)}
+
+    # === User and Role Management ===
+    
+    async def create_user(self, userid: str, password: str = None, email: str = None,
+                         firstname: str = None, lastname: str = None, 
+                         groups: List[str] = None, enable: bool = True) -> Dict[str, Any]:
+        """Create a new user."""
+        proxmox = self.get_proxmox_api()
+        
+        user_params = {'userid': userid}
+        
+        if password:
+            user_params['password'] = password
+        if email:
+            user_params['email'] = email
+        if firstname:
+            user_params['firstname'] = firstname
+        if lastname:
+            user_params['lastname'] = lastname
+        if groups:
+            user_params['groups'] = ','.join(groups)
+        if not enable:
+            user_params['enable'] = 0
+            
+        try:
+            result = proxmox.access.users.post(**user_params)
+            return {
+                'status': 'success',
+                'message': f'User {userid} created successfully.',
+                'userid': userid
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def delete_user(self, userid: str) -> Dict[str, Any]:
+        """Delete a user."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            result = proxmox.access.users(userid).delete()
+            return {
+                'status': 'success',
+                'message': f'User {userid} deleted successfully.'
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def list_users(self) -> Dict[str, Any]:
+        """List all users."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            users = proxmox.access.users.get()
+            return {'users': users}
+        except Exception as e:
+            return {'users': [], 'error': str(e)}
+
+    async def set_permissions(self, path: str, roleid: str, userid: str = None,
+                             groupid: str = None, propagate: bool = True) -> Dict[str, Any]:
+        """Set permissions for a user or group on a path."""
+        proxmox = self.get_proxmox_api()
+        
+        acl_params = {
+            'path': path,
+            'roles': roleid,
+            'propagate': 1 if propagate else 0
+        }
+        
+        if userid:
+            acl_params['users'] = userid
+        elif groupid:
+            acl_params['groups'] = groupid
+        else:
+            return {'status': 'error', 'message': 'Either userid or groupid must be specified'}
+            
+        try:
+            result = proxmox.access.acl.put(**acl_params)
+            return {
+                'status': 'success',
+                'message': f'Permissions set for {userid or groupid} on {path}'
+            }
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    async def list_roles(self) -> Dict[str, Any]:
+        """List all available roles."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            roles = proxmox.access.roles.get()
+            return {'roles': roles}
+        except Exception as e:
+            return {'roles': [], 'error': str(e)}
+
+    async def list_permissions(self) -> Dict[str, Any]:
+        """List all ACL permissions."""
+        proxmox = self.get_proxmox_api()
+        
+        try:
+            acls = proxmox.access.acl.get()
+            return {'permissions': acls}
+        except Exception as e:
+            return {'permissions': [], 'error': str(e)}

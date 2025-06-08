@@ -96,19 +96,72 @@ async def main():
             print("=" * 50)
             print("🎉 SUCCESS: Your Proxmox MCP Server is ready!")
             print("\n🔧 Available Tools:")
-            tools = [
+            print("  Core Management:")
+            core_tools = [
                 "list_resources - List all VMs and containers",
                 "get_resource_status - Get VM/container details",
                 "start_resource - Start a VM/container",
                 "stop_resource - Stop a VM/container", 
                 "shutdown_resource - Gracefully shutdown",
-                "restart_resource - Restart a VM/container",
+                "restart_resource - Restart a VM/container"
+            ]
+            for tool in core_tools:
+                print(f"    • {tool}")
+                
+            print("  Creation & Deletion:")
+            creation_tools = [
+                "create_vm - Create new VMs",
+                "create_container - Create new containers", 
+                "delete_resource - Delete VMs/containers"
+            ]
+            for tool in creation_tools:
+                print(f"    • {tool}")
+                
+            print("  Resource Management:")
+            resource_tools = [
+                "resize_resource - Resize CPU/RAM/disk"
+            ]
+            for tool in resource_tools:
+                print(f"    • {tool}")
+                
+            print("  Backup & Restore:")
+            backup_tools = [
+                "create_backup - Create backups",
+                "list_backups - List available backups",
+                "restore_backup - Restore from backup"
+            ]
+            for tool in backup_tools:
+                print(f"    • {tool}")
+                
+            print("  Templates & Cloning:")
+            template_tools = [
+                "create_template - Convert VM to template",
+                "clone_vm - Clone VMs/templates",
+                "list_templates - List available templates"
+            ]
+            for tool in template_tools:
+                print(f"    • {tool}")
+                
+            print("  Snapshots:")
+            snapshot_tools = [
                 "create_snapshot - Create VM snapshot",
                 "delete_snapshot - Delete VM snapshot",
                 "get_snapshots - List VM snapshots"
             ]
-            for tool in tools:
-                print(f"  • {tool}")
+            for tool in snapshot_tools:
+                print(f"    • {tool}")
+                
+            print("  User Management:")
+            user_tools = [
+                "create_user - Create new users",
+                "delete_user - Delete users",
+                "list_users - List all users",
+                "set_permissions - Set user permissions",
+                "list_roles - List available roles",
+                "list_permissions - List current permissions"
+            ]
+            for tool in user_tools:
+                print(f"    • {tool}")
                 
             print("\n📚 Available Resources:")
             resources = [
