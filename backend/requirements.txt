@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary # For PostgreSQL, adjust if using a different DB
+alembic
+pydantic
+python-dotenv
+celery
+redis # For Celery broker/result backend
+passlib[bcrypt] # For password hashing
+python-jose[cryptography] # For JWT tokens
+requests # For Proxmox API calls (will be part of ProxmoxService)
+# Placeholder for proxmoxer or similar library if we use one directly
+# python-proxmox-api (example, if such a library exists and is chosen)

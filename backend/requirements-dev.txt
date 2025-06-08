@@ -1,0 +1,13 @@
+pytest
+pytest-asyncio
+httpx # Required by TestClient
+pytest-cov # For coverage reporting
+# Add other testing utilities if needed, e.g.:
+# factory-boy # For creating test data
+# freezegun # For controlling time in tests
+# sqlalchemy-utils # For test database management (if not using in-memory)
+# alembic # To manage test DB schema if not in-memory/auto-created
+# coverage # Alternative to pytest-cov for generating coverage reports
+
+# Include main requirements
+-r requirements.txt
