@@ -855,7 +855,7 @@ if __name__ == "__main__":
             i += 2
         elif sys.argv[i] in ["--help", "-h"]:
             print("Proxmox MCP Server - SSE Transport")
-            print("Usage: python simple_server.py [--mount-path PATH]")
+            print("Usage: python mcp_server.py [--mount-path PATH]")
             print()
             print("Options:")
             print("  --mount-path PATH  SSE mount path (optional)")

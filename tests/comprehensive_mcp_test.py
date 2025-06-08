@@ -16,8 +16,8 @@ import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-# Add the current directory to Python path for src imports
-sys.path.append(os.path.dirname(__file__))
+# Add the parent directory to Python path for src imports
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 try:
     from src.unified_service import ProxmoxService
@@ -231,7 +231,7 @@ class ProxmoxMCPTester:
     async def test_list_resources(self) -> Dict[str, Any]:
         """Test list_resources tool."""
         try:
-            result = self.service.list_resources()
+            result = await self.service.list_resources()
             resources = result.get('resources', [])
             nodes = len(set(r['node'] for r in resources))
             return {
@@ -245,14 +245,14 @@ class ProxmoxMCPTester:
     async def test_get_resource_status(self) -> Dict[str, Any]:
         """Test get_resource_status tool."""
         try:
-            resources = self.service.list_resources()
+            resources = await self.service.list_resources()
             running_resources = [r for r in resources['resources'] if r['status'] == 'running']
             
             if not running_resources:
                 return {'success': False, 'message': 'No running resources found for testing'}
             
             test_resource = running_resources[0]
-            result = self.service.get_resource_status(str(test_resource['vmid']), test_resource['node'])
+            result = await self.service.get_resource_status(str(test_resource['vmid']), test_resource['node'])
             
             # Check if we got the expected fields
             has_status = 'status' in result
@@ -270,7 +270,7 @@ class ProxmoxMCPTester:
     async def test_list_templates(self) -> Dict[str, Any]:
         """Test list_templates tool."""
         try:
-            result = self.service.list_templates()
+            result = await self.service.list_templates()
             templates = result.get('templates', [])
             return {
                 'success': True,
@@ -286,12 +286,12 @@ class ProxmoxMCPTester:
             return {'success': True, 'message': 'Skipped (destructive test disabled)'}
             
         try:
-            resources = self.service.list_resources()
+            resources = await self.service.list_resources()
             stopped_resources = [r for r in resources['resources'] if r['status'] == 'stopped']
             
             if stopped_resources:
                 test_resource = stopped_resources[0]
-                result = self.service.start_resource(str(test_resource['vmid']), test_resource['node'])
+                result = await self.service.start_resource(str(test_resource['vmid']), test_resource['node'])
                 return {
                     'success': True,
                     'message': f"Start command sent successfully",
@@ -326,7 +326,7 @@ class ProxmoxMCPTester:
             return {'success': True, 'message': 'Skipped (destructive test disabled)'}
             
         try:
-            result = self.service.create_vm(
+            result = await self.service.create_vm(
                 vmid=self.test_vmid,
                 node=self.test_node,
                 name=f"MCP-Test-VM-{self.test_vmid}",
@@ -373,7 +373,7 @@ class ProxmoxMCPTester:
             await asyncio.sleep(5)
             
             snapname = f"mcp-test-snap-{int(time.time())}"
-            result = self.service.create_snapshot(
+            result = await self.service.create_snapshot(
                 vmid=self.test_vmid,
                 node=self.test_node,
                 snapname=snapname,
@@ -393,7 +393,7 @@ class ProxmoxMCPTester:
     async def test_get_snapshots(self) -> Dict[str, Any]:
         """Test get_snapshots tool."""
         try:
-            result = self.service.get_snapshots(self.test_vmid, self.test_node)
+            result = await self.service.get_snapshots(self.test_vmid, self.test_node)
             snapshots = result.get('snapshots', [])
             return {
                 'success': True,
@@ -418,7 +418,7 @@ class ProxmoxMCPTester:
     async def test_list_backups(self) -> Dict[str, Any]:
         """Test list_backups tool."""
         try:
-            result = self.service.list_backups()
+            result = await self.service.list_backups()
             backups = result.get('backups', [])
             return {
                 'success': True,
@@ -453,7 +453,7 @@ class ProxmoxMCPTester:
             
         try:
             test_userid = f"mcp-test-user-{int(time.time())}"
-            result = self.service.create_user(
+            result = await self.service.create_user(
                 userid=test_userid,
                 password="TempPassword123!",
                 email="test@example.com",
@@ -474,7 +474,7 @@ class ProxmoxMCPTester:
     async def test_list_users(self) -> Dict[str, Any]:
         """Test list_users tool."""
         try:
-            result = self.service.list_users()
+            result = await self.service.list_users()
             users = result.get('users', [])
             return {
                 'success': True,
@@ -499,7 +499,7 @@ class ProxmoxMCPTester:
     async def test_list_roles(self) -> Dict[str, Any]:
         """Test list_roles tool."""
         try:
-            result = self.service.list_roles()
+            result = await self.service.list_roles()
             roles = result.get('roles', [])
             return {
                 'success': True,
@@ -512,7 +512,7 @@ class ProxmoxMCPTester:
     async def test_list_permissions(self) -> Dict[str, Any]:
         """Test list_permissions tool."""
         try:
-            result = self.service.list_permissions()
+            result = await self.service.list_permissions()
             permissions = result.get('permissions', [])
             return {
                 'success': True,
@@ -526,7 +526,7 @@ class ProxmoxMCPTester:
     async def test_list_storage(self) -> Dict[str, Any]:
         """Test list_storage tool."""
         try:
-            result = self.service.list_storage()
+            result = await self.service.list_storage()
             storage_list = result.get('storage', [])
             nodes = len(set(s['node'] for s in storage_list))
             storage_types = set(s['type'] for s in storage_list)
@@ -542,7 +542,7 @@ class ProxmoxMCPTester:
         """Test get_storage_status tool."""
         try:
             # Get available storage first
-            storage_result = self.service.list_storage()
+            storage_result = await self.service.list_storage()
             storage_list = storage_result.get('storage', [])
             
             if not storage_list:
@@ -550,7 +550,7 @@ class ProxmoxMCPTester:
             
             # Test with the first storage
             test_storage = storage_list[0]
-            result = self.service.get_storage_status(test_storage['storage'], test_storage['node'])
+            result = await self.service.get_storage_status(test_storage['storage'], test_storage['node'])
             
             return {
                 'success': True,
@@ -564,7 +564,7 @@ class ProxmoxMCPTester:
         """Test list_storage_content tool."""
         try:
             # Get available storage first
-            storage_result = self.service.list_storage()
+            storage_result = await self.service.list_storage()
             storage_list = storage_result.get('storage', [])
             
             if not storage_list:
@@ -581,7 +581,7 @@ class ProxmoxMCPTester:
             if not test_storage:
                 test_storage = storage_list[0]  # Fallback to first storage
             
-            result = self.service.list_storage_content(test_storage['storage'], test_storage['node'])
+            result = await self.service.list_storage_content(test_storage['storage'], test_storage['node'])
             content_list = result.get('content', [])
             
             return {
@@ -599,7 +599,7 @@ class ProxmoxMCPTester:
             content_types_to_test = ['images', 'backup', 'vztmpl']
             
             for content_type in content_types_to_test:
-                result = self.service.get_suitable_storage(self.test_node, content_type)
+                result = await self.service.get_suitable_storage(self.test_node, content_type)
                 suitable_storage = result.get('suitable_storage', [])
                 
                 if suitable_storage:
@@ -622,7 +622,7 @@ class ProxmoxMCPTester:
     async def test_list_tasks(self) -> Dict[str, Any]:
         """Test list_tasks tool."""
         try:
-            result = self.service.list_tasks(node=self.test_node, limit=10)
+            result = await self.service.list_tasks(node=self.test_node, limit=10)
             tasks = result.get('tasks', [])
             return {
                 'success': True,
@@ -636,7 +636,7 @@ class ProxmoxMCPTester:
         """Test get_task_status tool."""
         try:
             # First get a recent task
-            tasks_result = self.service.list_tasks(node=self.test_node, limit=5)
+            tasks_result = await self.service.list_tasks(node=self.test_node, limit=5)
             tasks = tasks_result.get('tasks', [])
             
             if not tasks:
@@ -649,7 +649,7 @@ class ProxmoxMCPTester:
             if not upid:
                 return {'success': True, 'message': 'No valid task UPID found'}
             
-            result = self.service.get_task_status(self.test_node, upid)
+            result = await self.service.get_task_status(self.test_node, upid)
             return {
                 'success': True,
                 'message': f"Task status retrieved successfully",
@@ -668,7 +668,7 @@ class ProxmoxMCPTester:
     async def test_list_backup_jobs(self) -> Dict[str, Any]:
         """Test list_backup_jobs tool."""
         try:
-            result = self.service.list_backup_jobs(node=self.test_node)
+            result = await self.service.list_backup_jobs(node=self.test_node)
             jobs = result.get('backup_jobs', [])
             return {
                 'success': True,
@@ -689,7 +689,7 @@ class ProxmoxMCPTester:
     async def test_get_cluster_health(self) -> Dict[str, Any]:
         """Test get_cluster_health tool."""
         try:
-            result = self.service.get_cluster_health()
+            result = await self.service.get_cluster_health()
             cluster_name = result.get('cluster_name', 'unknown')
             nodes_online = result.get('nodes_online', 0)
             nodes_total = result.get('nodes_total', 0)
@@ -704,7 +704,7 @@ class ProxmoxMCPTester:
     async def test_get_node_status_detailed(self) -> Dict[str, Any]:
         """Test get_node_status_detailed tool."""
         try:
-            result = self.service.get_node_status_detailed(self.test_node)
+            result = await self.service.get_node_status_detailed(self.test_node)
             cpu_cores = result.get('cpu', {}).get('cores', 0)
             memory_gb = result.get('memory', {}).get('total', 0) / (1024**3) if result.get('memory', {}).get('total') else 0
             uptime = result.get('uptime_human', 'unknown')
@@ -719,7 +719,7 @@ class ProxmoxMCPTester:
     async def test_list_cluster_resources(self) -> Dict[str, Any]:
         """Test list_cluster_resources tool."""
         try:
-            result = self.service.list_cluster_resources()
+            result = await self.service.list_cluster_resources()
             resources = result.get('resources', [])
             resource_types = {}
             for resource in resources:
@@ -752,7 +752,7 @@ class ProxmoxMCPTester:
     async def test_get_cluster_config(self) -> Dict[str, Any]:
         """Test get_cluster_config tool."""
         try:
-            result = self.service.get_cluster_config()
+            result = await self.service.get_cluster_config()
             cluster_name = result.get('cluster_name', 'unknown')
             has_config = bool(result.get('config'))
             has_options = bool(result.get('options'))
@@ -776,7 +776,7 @@ class ProxmoxMCPTester:
                 return {'success': True, 'message': 'No running VMs available for stats testing'}
             
             test_vm = running_vms[0]
-            result = self.service.get_vm_stats(str(test_vm['vmid']), test_vm['node'])
+            result = await self.service.get_vm_stats(str(test_vm['vmid']), test_vm['node'])
             
             stats = result.get('stats', {})
             summary = result.get('summary', {})
@@ -791,7 +791,7 @@ class ProxmoxMCPTester:
     async def test_get_node_stats(self) -> Dict[str, Any]:
         """Test get_node_stats tool."""
         try:
-            result = self.service.get_node_stats(self.test_node)
+            result = await self.service.get_node_stats(self.test_node)
             stats = result.get('stats', {})
             summary = result.get('summary', {})
             return {
@@ -806,14 +806,14 @@ class ProxmoxMCPTester:
         """Test get_storage_stats tool."""
         try:
             # Get first available storage
-            storage_result = self.service.list_storage(node=self.test_node)
+            storage_result = await self.service.list_storage(node=self.test_node)
             storage_list = storage_result.get('storage', [])
             
             if not storage_list:
                 return {'success': True, 'message': 'No storage available for stats testing'}
             
             test_storage = storage_list[0]['storage']
-            result = self.service.get_storage_stats(test_storage, self.test_node)
+            result = await self.service.get_storage_stats(test_storage, self.test_node)
             
             stats = result.get('stats', {})
             return {
@@ -827,7 +827,7 @@ class ProxmoxMCPTester:
     async def test_list_alerts(self) -> Dict[str, Any]:
         """Test list_alerts tool."""
         try:
-            result = self.service.list_alerts(node=self.test_node)
+            result = await self.service.list_alerts(node=self.test_node)
             alerts = result.get('alerts', [])
             
             critical_alerts = len([a for a in alerts if a.get('severity') == 'critical'])
@@ -844,7 +844,7 @@ class ProxmoxMCPTester:
     async def test_get_resource_usage(self) -> Dict[str, Any]:
         """Test get_resource_usage tool."""
         try:
-            result = self.service.get_resource_usage(node=self.test_node)
+            result = await self.service.get_resource_usage(node=self.test_node)
             cluster_totals = result.get('cluster_totals', {})
             cpu_usage = cluster_totals.get('cpu_usage_percent', 0)
             memory_usage = cluster_totals.get('memory_usage_percent', 0)
@@ -862,7 +862,7 @@ class ProxmoxMCPTester:
     async def test_list_networks(self) -> Dict[str, Any]:
         """Test list_networks tool."""
         try:
-            result = self.service.list_networks(node=self.test_node)
+            result = await self.service.list_networks(node=self.test_node)
             networks = result.get('networks', [])
             
             network_types = {}
@@ -883,14 +883,14 @@ class ProxmoxMCPTester:
         """Test get_network_config tool."""
         try:
             # Get first available network interface
-            networks_result = self.service.list_networks(node=self.test_node)
+            networks_result = await self.service.list_networks(node=self.test_node)
             networks = networks_result.get('networks', [])
             
             if not networks:
                 return {'success': True, 'message': 'No network interfaces available for testing'}
             
             test_interface = networks[0]['iface']
-            result = self.service.get_network_config(self.test_node, test_interface)
+            result = await self.service.get_network_config(self.test_node, test_interface)
             
             config = result.get('config', {})
             interface_type = config.get('type', 'unknown')
@@ -905,7 +905,7 @@ class ProxmoxMCPTester:
     async def test_get_node_network(self) -> Dict[str, Any]:
         """Test get_node_network tool."""
         try:
-            result = self.service.get_node_network(self.test_node)
+            result = await self.service.get_node_network(self.test_node)
             interface_count = result.get('interface_count', {})
             total_interfaces = interface_count.get('total', 0)
             bridges = interface_count.get('bridges', 0)
@@ -921,7 +921,7 @@ class ProxmoxMCPTester:
     async def test_list_firewall_rules(self) -> Dict[str, Any]:
         """Test list_firewall_rules tool."""
         try:
-            result = self.service.list_firewall_rules(node=self.test_node)
+            result = await self.service.list_firewall_rules(node=self.test_node)
             rules = result.get('firewall_rules', [])
             
             rule_scopes = {}
@@ -941,7 +941,7 @@ class ProxmoxMCPTester:
     async def test_get_firewall_status(self) -> Dict[str, Any]:
         """Test get_firewall_status tool."""
         try:
-            result = self.service.get_firewall_status(node=self.test_node)
+            result = await self.service.get_firewall_status(node=self.test_node)
             scope = result.get('scope', 'unknown')
             options = result.get('options', {})
             enabled = options.get('enable', 'unknown')
@@ -965,22 +965,22 @@ class ProxmoxMCPTester:
             try:
                 if resource[0] == 'snapshot':
                     _, vmid, node, snapname = resource
-                    self.service.delete_snapshot(vmid, node, snapname)
+                    await self.service.delete_snapshot(vmid, node, snapname)
                     print(f"   ✅ Deleted snapshot: {snapname}")
                     
                 elif resource[0] == 'vm':
                     _, vmid, node = resource
-                    self.service.delete_resource(vmid, node, force=True)
+                    await self.service.delete_resource(vmid, node, force=True)
                     print(f"   ✅ Deleted VM: {vmid}")
                     
                 elif resource[0] == 'container':
                     _, vmid, node = resource
-                    self.service.delete_resource(vmid, node, force=True)
+                    await self.service.delete_resource(vmid, node, force=True)
                     print(f"   ✅ Deleted container: {vmid}")
                     
                 elif resource[0] == 'user':
                     _, userid = resource
-                    self.service.delete_user(userid)
+                    await self.service.delete_user(userid)
                     print(f"   ✅ Deleted user: {userid}")
                     
                 await asyncio.sleep(1)  # Small delay between deletions
@@ -1056,6 +1056,8 @@ async def main():
     
     try:
         await tester.run_all_tests()
+        await tester.cleanup_test_resources()
+        tester.print_final_report()
         return 0
     except KeyboardInterrupt:
         print("\n\n⚠️  Test interrupted by user")
