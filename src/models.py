@@ -142,3 +142,87 @@ class SuitableStorageParams(BaseModel):
     node: str
     content_type: str
     min_free_gb: Optional[float] = 0
+
+# Task Management Models
+class TaskListParams(BaseModel):
+    node: Optional[str] = ""
+    limit: Optional[int] = 20
+    running_only: Optional[bool] = False
+
+class TaskStatusParams(BaseModel):
+    node: str
+    upid: str
+
+class CancelTaskParams(BaseModel):
+    node: str
+    upid: str
+
+class BackupJobParams(BaseModel):
+    node: str
+    schedule: str
+    vmid: Optional[str] = ""
+    storage: Optional[str] = "local"
+    enabled: Optional[bool] = True
+    comment: Optional[str] = ""
+    mailto: Optional[str] = ""
+    compress: Optional[str] = "zstd"
+    mode: Optional[str] = "snapshot"
+
+# Cluster Management Models
+class NodeStatusParams(BaseModel):
+    node: str
+
+class ClusterResourcesParams(BaseModel):
+    resource_type: Optional[str] = ""
+
+class MigrateVMParams(BaseModel):
+    vmid: str
+    source_node: str
+    target_node: str
+    online: Optional[bool] = True
+    force: Optional[bool] = False
+
+class NodeMaintenanceParams(BaseModel):
+    node: str
+    maintenance: bool
+    reason: Optional[str] = "Maintenance mode"
+
+# Monitoring Models
+class VMStatsParams(BaseModel):
+    vmid: str
+    node: str
+    timeframe: Optional[str] = "hour"
+
+class NodeStatsParams(BaseModel):
+    node: str
+    timeframe: Optional[str] = "hour"
+
+class StorageStatsParams(BaseModel):
+    storage: str
+    node: str
+    timeframe: Optional[str] = "hour"
+
+class AlertsParams(BaseModel):
+    node: Optional[str] = ""
+
+class ResourceUsageParams(BaseModel):
+    node: Optional[str] = ""
+
+# Network Management Models
+class NetworkListParams(BaseModel):
+    node: Optional[str] = ""
+
+class NetworkConfigParams(BaseModel):
+    node: str
+    interface: str
+
+class NodeNetworkParams(BaseModel):
+    node: str
+
+class FirewallRulesParams(BaseModel):
+    node: Optional[str] = ""
+    vmid: Optional[str] = ""
+
+class FirewallStatusParams(BaseModel):
+    node: Optional[str] = ""
+    vmid: Optional[str] = ""

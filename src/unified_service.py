@@ -10,6 +10,10 @@ from .template_service import TemplateService
 from .snapshot_service import SnapshotService
 from .user_service import UserService
 from .storage_service import StorageService
+from .task_service import TaskService
+from .cluster_service import ClusterService
+from .monitoring_service import MonitoringService
+from .network_service import NetworkService
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,10 @@ class ProxmoxService(BaseProxmoxService):
         self.snapshot_service = SnapshotService(proxmox_api=self.proxmox)
         self.user_service = UserService(proxmox_api=self.proxmox)
         self.storage_service = StorageService(proxmox_api=self.proxmox)
+        self.task_service = TaskService(proxmox_api=self.proxmox)
+        self.cluster_service = ClusterService(proxmox_api=self.proxmox)
+        self.monitoring_service = MonitoringService(proxmox_api=self.proxmox)
+        self.network_service = NetworkService(proxmox_api=self.proxmox)
     
     # Core functionality - async wrappers
     async def list_resources(self) -> Dict[str, Any]:
@@ -189,6 +197,105 @@ class ProxmoxService(BaseProxmoxService):
         suitable_storage = self.storage_service.get_suitable_storage(node, content_type, min_free_gb)
         return {'suitable_storage': suitable_storage}
     
+    # Task Management - async wrappers
+    async def list_tasks(self, node: str = "", limit: int = 20, running_only: bool = False) -> Dict[str, Any]:
+        """List recent tasks on node(s)."""
+        tasks = self.task_service.list_tasks(node, limit, running_only)
+        return {'tasks': tasks}
+    
+    async def get_task_status(self, node: str, upid: str) -> Dict[str, Any]:
+        """Get detailed status and logs for a specific task."""
+        return self.task_service.get_task_status(node, upid)
+    
+    async def cancel_task(self, node: str, upid: str) -> Dict[str, Any]:
+        """Cancel a running task."""
+        return self.task_service.cancel_task(node, upid)
+    
+    async def list_backup_jobs(self, node: str = "") -> Dict[str, Any]:
+        """List scheduled backup jobs."""
+        jobs = self.task_service.list_backup_jobs(node)
+        return {'backup_jobs': jobs}
+    
+    async def create_backup_job(self, node: str, schedule: str, vmid: str = "", 
+                               storage: str = "local", enabled: bool = True,
+                               comment: str = "", mailto: str = "", compress: str = "zstd",
+                               mode: str = "snapshot") -> Dict[str, Any]:
+        """Create a new scheduled backup job."""
+        return self.task_service.create_backup_job(node, schedule, vmid, storage, enabled, comment, mailto, compress, mode)
+    
+    # Cluster Management - async wrappers
+    async def get_cluster_health(self) -> Dict[str, Any]:
+        """Get overall cluster health and status."""
+        return self.cluster_service.get_cluster_status()
+    
+    async def get_node_status_detailed(self, node: str) -> Dict[str, Any]:
+        """Get detailed status of a specific node."""
+        return self.cluster_service.get_node_status(node)
+    
+    async def list_cluster_resources(self, resource_type: str = "") -> Dict[str, Any]:
+        """List and categorize cluster resources."""
+        resources = self.cluster_service.list_cluster_resources(resource_type)
+        return {'resources': resources}
+    
+    async def migrate_vm(self, vmid: str, source_node: str, target_node: str, 
+                        online: bool = True, force: bool = False) -> Dict[str, Any]:
+        """Migrate a VM between nodes."""
+        return self.cluster_service.migrate_vm(vmid, source_node, target_node, online, force)
+    
+    async def set_node_maintenance(self, node: str, maintenance: bool, 
+                                  reason: str = "Maintenance mode") -> Dict[str, Any]:
+        """Set node maintenance mode."""
+        return self.cluster_service.set_node_maintenance(node, maintenance, reason)
+    
+    async def get_cluster_config(self) -> Dict[str, Any]:
+        """Get cluster-wide configuration."""
+        return self.cluster_service.get_cluster_config()
+    
+    # Monitoring & Performance - async wrappers
+    async def get_vm_stats(self, vmid: str, node: str, timeframe: str = "hour") -> Dict[str, Any]:
+        """Get VM/container performance statistics over time."""
+        return self.monitoring_service.get_vm_stats(vmid, node, timeframe)
+    
+    async def get_node_stats(self, node: str, timeframe: str = "hour") -> Dict[str, Any]:
+        """Get node performance statistics over time."""
+        return self.monitoring_service.get_node_stats(node, timeframe)
+    
+    async def get_storage_stats(self, storage: str, node: str, timeframe: str = "hour") -> Dict[str, Any]:
+        """Get storage performance statistics over time."""
+        return self.monitoring_service.get_storage_stats(storage, node, timeframe)
+    
+    async def list_alerts(self, node: str = "") -> Dict[str, Any]:
+        """List system alerts and warnings."""
+        alerts = self.monitoring_service.list_alerts(node)
+        return {'alerts': alerts}
+    
+    async def get_resource_usage(self, node: str = "") -> Dict[str, Any]:
+        """Get real-time resource usage across cluster or specific node."""
+        return self.monitoring_service.get_resource_usage(node)
+    
+    # Network Management - async wrappers
+    async def list_networks(self, node: str = "") -> Dict[str, Any]:
+        """List network interfaces, bridges, VLANs, and bonds."""
+        networks = self.network_service.list_networks(node)
+        return {'networks': networks}
+    
+    async def get_network_config(self, node: str, interface: str) -> Dict[str, Any]:
+        """Get detailed configuration of a specific network interface."""
+        return self.network_service.get_network_config(node, interface)
+    
+    async def get_node_network(self, node: str) -> Dict[str, Any]:
+        """Get comprehensive network status for a specific node."""
+        return self.network_service.get_node_network(node)
+    
+    async def list_firewall_rules(self, node: str = "", vmid: str = "") -> Dict[str, Any]:
+        """List firewall rules for cluster, node, or specific VM."""
+        rules = self.network_service.list_firewall_rules(node, vmid)
+        return {'firewall_rules': rules}
+    
+    async def get_firewall_status(self, node: str = "", vmid: str = "") -> Dict[str, Any]:
+        """Get firewall status and configuration."""
+        return self.network_service.get_firewall_status(node, vmid)
+    
     # Resource helper methods for compatibility
     async def _get_resource_type(self, vmid: str, node: str) -> str:
         """Helper to determine if resource is qemu or lxc."""
@@ -202,21 +309,4 @@ class ProxmoxService(BaseProxmoxService):
             except:
                 raise ValueError(f"Resource {vmid} not found on node {node}")
     
-    # Additional methods for compatibility
-    async def get_cluster_status(self) -> Dict[str, Any]:
-        """Get cluster status."""
-        try:
-            cluster_status = self.proxmox.cluster.status.get()
-            return {'cluster_status': cluster_status}
-        except Exception as e:
-            logger.error(f"Failed to get cluster status: {e}")
-            raise
-    
-    async def get_nodes_status(self) -> Dict[str, Any]:
-        """Get nodes status."""
-        try:
-            nodes = self.proxmox.nodes.get()
-            return {'nodes': nodes}
-        except Exception as e:
-            logger.error(f"Failed to get nodes status: {e}")
-            raise 
+ 
