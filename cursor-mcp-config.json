@@ -2,11 +2,11 @@
   "mcpServers": {
     "proxmox": {
       "command": "python",
-      "args": ["/home/swhite/container-mcp-proxmox/simple_server.py"],
+      "args": ["/path/to/your/proxmox-mcp-server/simple_server.py"],
       "env": {
-        "PROXMOX_HOST": "10.0.0.101",
-        "PROXMOX_USER": "root@pam",
-        "PROXMOX_PASSWORD": "your-password-here"
+        "PROXMOX_HOST": "your-proxmox-host",
+        "PROXMOX_USER": "your-proxmox-user", 
+        "PROXMOX_PASSWORD": "your-proxmox-password"
       }
     }
   }

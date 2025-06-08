@@ -6,13 +6,14 @@ Test MCP SSE with proper session handling
 import asyncio
 import aiohttp
 import json
+import os
 import re
 
 async def test_mcp_with_session():
     """Test the full MCP SSE flow with session ID"""
     print("🧪 Testing MCP SSE with Session ID...")
     
-    sse_url = "http://10.0.0.107:8001/sse"
+    sse_url = os.getenv("MCP_SERVER_URL", "http://localhost:8001") + "/sse"
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -43,7 +44,7 @@ async def test_mcp_with_session():
                     return
             
             # Step 2: Use the session ID to send MCP messages
-            messages_url = f"http://10.0.0.107:8001/messages/?session_id={session_id}"
+            messages_url = f"{os.getenv('MCP_SERVER_URL', 'http://localhost:8001')}/messages/?session_id={session_id}"
             
             print(f"\n📡 Step 2: Testing messages endpoint with session...")
             

@@ -6,13 +6,14 @@ Test MCP SSE protocol to debug Cursor IDE issues
 import asyncio
 import aiohttp
 import json
+import os
 import sys
 
 async def test_mcp_sse():
     """Test the MCP SSE protocol like Cursor IDE would"""
     print("🧪 Testing MCP SSE Protocol...")
     
-    url = "http://10.0.0.107:8001/sse"
+    url = os.getenv("MCP_SERVER_URL", "http://localhost:8001") + "/sse"
     
     # MCP initialization message
     init_message = {
@@ -65,7 +66,7 @@ async def test_messages_endpoint():
     """Test the messages POST endpoint"""
     print("\n🧪 Testing Messages POST endpoint...")
     
-    url = "http://10.0.0.107:8001/messages"
+                url = os.getenv("MCP_SERVER_URL", "http://localhost:8001") + "/messages"
     
     # MCP initialization message
     init_message = {
