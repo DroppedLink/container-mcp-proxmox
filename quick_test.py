@@ -1,206 +1,121 @@
 #!/usr/bin/env python3
 """
-Quick test for the Proxmox MCP Server (SSE-only)
+Quick test for new Proxmox MCP tools
 """
 
 import asyncio
-import json
-import sys
 import os
-from dotenv import load_dotenv
+import sys
 
-# Load environment variables from .env file
-load_dotenv()
+# Add the current directory to Python path for src imports
+sys.path.append(os.path.dirname(__file__))
 
-async def test_sse_server(host=None, port=None):
-    """Test the SSE MCP server connectivity"""
-    # Use environment variables if not provided
-    if host is None:
-        host = os.getenv("MCP_SERVER_HOST", "localhost")
-    if port is None:
-        port = int(os.getenv("MCP_SERVER_PORT", "8001"))
-    
-    print(f"🧪 Testing Proxmox MCP Server at {host}:{port}...\n")
-    
-    try:
-        # Try to import aiohttp for testing
-        import aiohttp
-        
-        async with aiohttp.ClientSession() as session:
-            # Test basic connectivity
-            print("📡 Testing server connectivity...")
-            try:
-                # Test the SSE endpoint which should respond
-                async with session.get(f"http://{host}:{port}/sse") as resp:
-                    if resp.status == 200:
-                        print("✅ Server is responding!")
-                        print(f"   Status: {resp.status}")
-                        print(f"   Content-Type: {resp.headers.get('content-type', 'unknown')}")
-                        return True
-                    else:
-                        print(f"⚠️  Server returned status {resp.status}")
-                        return False
-            except aiohttp.ClientConnectorError:
-                print(f"❌ Cannot connect to server at {host}:{port}")
-                print("   Make sure the server is running:")
-                print(f"   python simple_server.py --host {host} --port {port}")
-                return False
-                
-    except ImportError:
-        print("⚠️  aiohttp not available for HTTP testing")
-        print("📝 To test the server manually:")
-        print(f"   1. Start server: python simple_server.py --port {port}")
-        print(f"   2. Check: curl http://{host}:{port}")
-        print("   3. Configure in Cursor IDE MCP settings")
-        return None
+try:
+    from src.unified_service import ProxmoxService
+except ImportError:
+    print("❌ Error: Cannot import ProxmoxService")
+    sys.exit(1)
 
-async def test_proxmox_connection():
-    """Test if Proxmox environment variables are set"""
-    print("🔧 Checking Proxmox configuration...")
-    
-    required_vars = ["PROXMOX_HOST", "PROXMOX_USER", "PROXMOX_PASSWORD"]
-    missing_vars = []
-    
-    for var in required_vars:
-        if not os.getenv(var):
-            missing_vars.append(var)
-        else:
-            print(f"✅ {var}: {'*' * 8}...")
-    
-    if missing_vars:
-        print(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-        print("   Create a .env file with:")
-        for var in missing_vars:
-            print(f"   {var}=your-value")
-        return False
-    
-    print("✅ All environment variables are set")
-    return True
-
-async def main():
-    """Main test function"""
-    print("🚀 Proxmox MCP Server Test Suite\n")
+async def test_new_tools():
+    """Test the new tools we added."""
+    print("🚀 Quick Test for New Proxmox MCP Tools")
     print("=" * 50)
     
-    # Check environment
-    env_ok = await test_proxmox_connection()
-    print()
+    # Check environment variables
+    host = os.getenv('PROXMOX_HOST')
+    user = os.getenv('PROXMOX_USER')
+    password = os.getenv('PROXMOX_PASSWORD')
     
-    # Test server if environment is OK
-    if env_ok:
-        print("=" * 50)
-        server_ok = await test_sse_server()
-        print()
+    if not all([host, user, password]):
+        print("❌ Missing environment variables")
+        return False
+    
+    print(f"🔗 Connecting to Proxmox: {host}")
+    
+    try:
+        service = ProxmoxService(host, user, password)
+        print("✅ Connected successfully")
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
+        return False
+    
+    # Get a test node
+    try:
+        resources = await service.list_resources()
+        if not resources.get('resources'):
+            print("❌ No resources found")
+            return False
         
-        if server_ok:
-            print("=" * 50)
-            print("🎉 SUCCESS: Your Proxmox MCP Server is ready!")
-            print("\n🔧 Available Tools:")
-            print("  Core Management:")
-            core_tools = [
-                "list_resources - List all VMs and containers",
-                "get_resource_status - Get VM/container details",
-                "start_resource - Start a VM/container",
-                "stop_resource - Stop a VM/container", 
-                "shutdown_resource - Gracefully shutdown",
-                "restart_resource - Restart a VM/container"
-            ]
-            for tool in core_tools:
-                print(f"    • {tool}")
+        test_node = resources['resources'][0]['node']
+        print(f"📍 Using test node: {test_node}")
+        
+    except Exception as e:
+        print(f"❌ Failed to get resources: {e}")
+        return False
+    
+    # Test new tools
+    tests = [
+        ("Storage Management", [
+            ("list_storage", lambda: service.list_storage()),
+            ("get_suitable_storage", lambda: service.get_suitable_storage(test_node, "images")),
+        ]),
+        ("Task Management", [
+            ("list_tasks", lambda: service.list_tasks(node=test_node, limit=5)),
+            ("list_backup_jobs", lambda: service.list_backup_jobs(node=test_node)),
+        ]),
+        ("Cluster Management", [
+            ("get_cluster_health", lambda: service.get_cluster_health()),
+            ("list_cluster_resources", lambda: service.list_cluster_resources()),
+            ("get_cluster_config", lambda: service.get_cluster_config()),
+        ]),
+        ("Performance Monitoring", [
+            ("get_node_stats", lambda: service.get_node_stats(test_node)),
+            ("list_alerts", lambda: service.list_alerts(node=test_node)),
+            ("get_resource_usage", lambda: service.get_resource_usage(node=test_node)),
+        ]),
+        ("Network Management", [
+            ("list_networks", lambda: service.list_networks(node=test_node)),
+            ("get_node_network", lambda: service.get_node_network(test_node)),
+            ("list_firewall_rules", lambda: service.list_firewall_rules(node=test_node)),
+        ]),
+    ]
+    
+    total_tests = sum(len(category_tests) for _, category_tests in tests)
+    passed = 0
+    
+    for category, category_tests in tests:
+        print(f"\n📂 {category}")
+        print("-" * 30)
+        
+        for test_name, test_func in category_tests:
+            try:
+                result = await test_func()
+                print(f"  ✅ {test_name}: Success")
+                # Print a small sample of the result
+                if isinstance(result, dict):
+                    keys = list(result.keys())[:3]
+                    sample = {k: result[k] for k in keys if k in result}
+                    print(f"     Sample: {sample}")
+                passed += 1
                 
-            print("  Creation & Deletion:")
-            creation_tools = [
-                "create_vm - Create new VMs",
-                "create_container - Create new containers", 
-                "delete_resource - Delete VMs/containers"
-            ]
-            for tool in creation_tools:
-                print(f"    • {tool}")
-                
-            print("  Resource Management:")
-            resource_tools = [
-                "resize_resource - Resize CPU/RAM/disk"
-            ]
-            for tool in resource_tools:
-                print(f"    • {tool}")
-                
-            print("  Backup & Restore:")
-            backup_tools = [
-                "create_backup - Create backups",
-                "list_backups - List available backups",
-                "restore_backup - Restore from backup"
-            ]
-            for tool in backup_tools:
-                print(f"    • {tool}")
-                
-            print("  Templates & Cloning:")
-            template_tools = [
-                "create_template - Convert VM to template",
-                "clone_vm - Clone VMs/templates",
-                "list_templates - List available templates"
-            ]
-            for tool in template_tools:
-                print(f"    • {tool}")
-                
-            print("  Snapshots:")
-            snapshot_tools = [
-                "create_snapshot - Create VM snapshot",
-                "delete_snapshot - Delete VM snapshot",
-                "get_snapshots - List VM snapshots"
-            ]
-            for tool in snapshot_tools:
-                print(f"    • {tool}")
-                
-            print("  User Management:")
-            user_tools = [
-                "create_user - Create new users",
-                "delete_user - Delete users",
-                "list_users - List all users",
-                "set_permissions - Set user permissions",
-                "list_roles - List available roles",
-                "list_permissions - List current permissions"
-            ]
-            for tool in user_tools:
-                print(f"    • {tool}")
-                
-            print("\n📚 Available Resources:")
-            resources = [
-                "proxmox://cluster/status - Cluster information",
-                "proxmox://nodes/status - Node status"
-            ]
-            for resource in resources:
-                print(f"  • {resource}")
-                
-            print("\n🎯 Next Steps:")
-            print("  1. Keep the server running:")
-            print("     python simple_server.py --port 8001")
-            print("  2. Configure in Cursor IDE MCP settings:")
-            print("     URL: http://localhost:8001")
-            print("     Transport: SSE")
+            except Exception as e:
+                print(f"  ❌ {test_name}: Failed - {e}")
             
-        elif server_ok is False:
-            print("=" * 50)
-            print("❌ Server test failed")
-            print("🔧 Troubleshooting:")
-            print("  1. Start the server first:")
-            print("     python simple_server.py")
-            print("  2. Check if port 8001 is available")
-            print("  3. Check server logs for errors")
-        else:
-            print("=" * 50) 
-            print("⚠️  Could not test server connectivity")
-            print("📝 Manual testing steps:")
-            print("  1. Start: python simple_server.py")
-            print("  2. Test: curl http://localhost:8001")
-            print("  3. Configure in Cursor IDE")
+            await asyncio.sleep(0.1)  # Small delay
+    
+    print(f"\n🎯 Results: {passed}/{total_tests} tests passed ({passed/total_tests*100:.1f}%)")
+    
+    if passed == total_tests:
+        print("🎉 All new tools are working correctly!")
+        return True
     else:
-        print("🔧 Please fix environment configuration first")
+        print("⚠️  Some tools need attention")
+        return False
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        success = asyncio.run(test_new_tools())
+        sys.exit(0 if success else 1)
     except KeyboardInterrupt:
-        print("\n👋 Test interrupted by user")
-    except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+        print("\n\nTest interrupted")
         sys.exit(1) 

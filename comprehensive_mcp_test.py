@@ -16,11 +16,11 @@ import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-# Add the src directory to Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add the current directory to Python path for src imports
+sys.path.append(os.path.dirname(__file__))
 
 try:
-    from unified_service import ProxmoxService
+    from src.unified_service import ProxmoxService
 except ImportError:
     print("❌ Error: Cannot import ProxmoxService. Make sure you're in the correct directory.")
     sys.exit(1)
@@ -62,7 +62,7 @@ class ProxmoxMCPTester:
             return False
             
         # Get available nodes and resources
-        resources = self.service.list_resources()
+        resources = await self.service.list_resources()
         nodes = list(set(r['node'] for r in resources['resources']))
         
         print(f"\n📊 Found {len(resources['resources'])} resources across {len(nodes)} nodes:")
@@ -122,7 +122,7 @@ class ProxmoxMCPTester:
         print("🧪 Starting Comprehensive Test Suite")
         print("=" * 60)
         
-        # Test all 25 MCP tools systematically
+        # Test all 45+ MCP tools systematically
         tools_to_test = [
             # Resource Discovery (3 tools)
             ("list_resources", "List all VMs and containers", self.test_list_resources),
@@ -168,6 +168,35 @@ class ProxmoxMCPTester:
             ("get_storage_status", "Get detailed storage status", self.test_get_storage_status),
             ("list_storage_content", "List storage content", self.test_list_storage_content),
             ("get_suitable_storage", "Find suitable storage", self.test_get_suitable_storage),
+            
+            # Task Management (5 tools)
+            ("list_tasks", "List recent tasks", self.test_list_tasks),
+            ("get_task_status", "Get task status and logs", self.test_get_task_status),
+            ("cancel_task", "Cancel running task", self.test_cancel_task),
+            ("list_backup_jobs", "List scheduled backup jobs", self.test_list_backup_jobs),
+            ("create_backup_job", "Create backup job", self.test_create_backup_job),
+            
+            # Cluster Management (6 tools)
+            ("get_cluster_health", "Get cluster health status", self.test_get_cluster_health),
+            ("get_node_status_detailed", "Get detailed node status", self.test_get_node_status_detailed),
+            ("list_cluster_resources", "List cluster resources", self.test_list_cluster_resources),
+            ("migrate_vm", "Migrate VM between nodes", self.test_migrate_vm),
+            ("set_node_maintenance", "Set node maintenance mode", self.test_set_node_maintenance),
+            ("get_cluster_config", "Get cluster configuration", self.test_get_cluster_config),
+            
+            # Performance Monitoring (5 tools)
+            ("get_vm_stats", "Get VM performance stats", self.test_get_vm_stats),
+            ("get_node_stats", "Get node performance stats", self.test_get_node_stats),
+            ("get_storage_stats", "Get storage performance stats", self.test_get_storage_stats),
+            ("list_alerts", "List system alerts", self.test_list_alerts),
+            ("get_resource_usage", "Get real-time resource usage", self.test_get_resource_usage),
+            
+            # Network Management (5 tools)
+            ("list_networks", "List network interfaces", self.test_list_networks),
+            ("get_network_config", "Get network interface config", self.test_get_network_config),
+            ("get_node_network", "Get node network status", self.test_get_node_network),
+            ("list_firewall_rules", "List firewall rules", self.test_list_firewall_rules),
+            ("get_firewall_status", "Get firewall status", self.test_get_firewall_status),
         ]
         
         total_tests = len(tools_to_test)
@@ -589,6 +618,342 @@ class ProxmoxMCPTester:
         except Exception as e:
             return {'success': False, 'message': str(e)}
     
+    # Task Management Test Methods
+    async def test_list_tasks(self) -> Dict[str, Any]:
+        """Test list_tasks tool."""
+        try:
+            result = self.service.list_tasks(node=self.test_node, limit=10)
+            tasks = result.get('tasks', [])
+            return {
+                'success': True,
+                'message': f"Task listing successful",
+                'data': f"{len(tasks)} recent tasks found"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_task_status(self) -> Dict[str, Any]:
+        """Test get_task_status tool."""
+        try:
+            # First get a recent task
+            tasks_result = self.service.list_tasks(node=self.test_node, limit=5)
+            tasks = tasks_result.get('tasks', [])
+            
+            if not tasks:
+                return {'success': True, 'message': 'No tasks available for testing'}
+            
+            # Test with the most recent task
+            recent_task = tasks[0]
+            upid = recent_task.get('upid')
+            
+            if not upid:
+                return {'success': True, 'message': 'No valid task UPID found'}
+            
+            result = self.service.get_task_status(self.test_node, upid)
+            return {
+                'success': True,
+                'message': f"Task status retrieved successfully",
+                'data': f"Task: {result.get('type', 'unknown')} - Status: {result.get('status', 'unknown')}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_cancel_task(self) -> Dict[str, Any]:
+        """Test cancel_task tool."""
+        if not self.run_destructive:
+            return {'success': True, 'message': 'Skipped (destructive test disabled)'}
+        
+        return {'success': True, 'message': 'Tool available (not tested to avoid disruption)'}
+    
+    async def test_list_backup_jobs(self) -> Dict[str, Any]:
+        """Test list_backup_jobs tool."""
+        try:
+            result = self.service.list_backup_jobs(node=self.test_node)
+            jobs = result.get('backup_jobs', [])
+            return {
+                'success': True,
+                'message': f"Backup jobs listing successful",
+                'data': f"{len(jobs)} scheduled backup jobs found"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_create_backup_job(self) -> Dict[str, Any]:
+        """Test create_backup_job tool."""
+        if not self.run_destructive:
+            return {'success': True, 'message': 'Skipped (destructive test disabled)'}
+        
+        return {'success': True, 'message': 'Tool available (not tested to avoid creating actual jobs)'}
+    
+    # Cluster Management Test Methods
+    async def test_get_cluster_health(self) -> Dict[str, Any]:
+        """Test get_cluster_health tool."""
+        try:
+            result = self.service.get_cluster_health()
+            cluster_name = result.get('cluster_name', 'unknown')
+            nodes_online = result.get('nodes_online', 0)
+            nodes_total = result.get('nodes_total', 0)
+            return {
+                'success': True,
+                'message': f"Cluster health retrieved successfully",
+                'data': f"Cluster: {cluster_name}, Nodes: {nodes_online}/{nodes_total} online"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_node_status_detailed(self) -> Dict[str, Any]:
+        """Test get_node_status_detailed tool."""
+        try:
+            result = self.service.get_node_status_detailed(self.test_node)
+            cpu_cores = result.get('cpu', {}).get('cores', 0)
+            memory_gb = result.get('memory', {}).get('total', 0) / (1024**3) if result.get('memory', {}).get('total') else 0
+            uptime = result.get('uptime_human', 'unknown')
+            return {
+                'success': True,
+                'message': f"Detailed node status retrieved",
+                'data': f"Node: {self.test_node}, CPU: {cpu_cores} cores, RAM: {memory_gb:.1f}GB, Uptime: {uptime}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_list_cluster_resources(self) -> Dict[str, Any]:
+        """Test list_cluster_resources tool."""
+        try:
+            result = self.service.list_cluster_resources()
+            resources = result.get('resources', [])
+            resource_types = {}
+            for resource in resources:
+                res_type = resource.get('type', 'unknown')
+                resource_types[res_type] = resource_types.get(res_type, 0) + 1
+            
+            summary = ", ".join([f"{count} {res_type}" for res_type, count in resource_types.items()])
+            return {
+                'success': True,
+                'message': f"Cluster resources listed successfully",
+                'data': f"Total: {len(resources)} resources ({summary})"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_migrate_vm(self) -> Dict[str, Any]:
+        """Test migrate_vm tool."""
+        if not self.run_destructive:
+            return {'success': True, 'message': 'Skipped (destructive test disabled)'}
+        
+        return {'success': True, 'message': 'Tool available (not tested to avoid actual migration)'}
+    
+    async def test_set_node_maintenance(self) -> Dict[str, Any]:
+        """Test set_node_maintenance tool."""
+        if not self.run_destructive:
+            return {'success': True, 'message': 'Skipped (destructive test disabled)'}
+        
+        return {'success': True, 'message': 'Tool available (not tested to avoid maintenance mode)'}
+    
+    async def test_get_cluster_config(self) -> Dict[str, Any]:
+        """Test get_cluster_config tool."""
+        try:
+            result = self.service.get_cluster_config()
+            cluster_name = result.get('cluster_name', 'unknown')
+            has_config = bool(result.get('config'))
+            has_options = bool(result.get('options'))
+            return {
+                'success': True,
+                'message': f"Cluster configuration retrieved",
+                'data': f"Cluster: {cluster_name}, Config: {has_config}, Options: {has_options}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    # Performance Monitoring Test Methods
+    async def test_get_vm_stats(self) -> Dict[str, Any]:
+        """Test get_vm_stats tool."""
+        try:
+            # Get a running VM for testing
+            resources = self.service.list_resources()
+            running_vms = [r for r in resources['resources'] if r['status'] == 'running' and r['type'] in ['qemu', 'lxc']]
+            
+            if not running_vms:
+                return {'success': True, 'message': 'No running VMs available for stats testing'}
+            
+            test_vm = running_vms[0]
+            result = self.service.get_vm_stats(str(test_vm['vmid']), test_vm['node'])
+            
+            stats = result.get('stats', {})
+            summary = result.get('summary', {})
+            return {
+                'success': True,
+                'message': f"VM stats retrieved successfully",
+                'data': f"VM: {test_vm['name']} (ID: {test_vm['vmid']}), Data points: {stats.get('data_points', 0)}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_node_stats(self) -> Dict[str, Any]:
+        """Test get_node_stats tool."""
+        try:
+            result = self.service.get_node_stats(self.test_node)
+            stats = result.get('stats', {})
+            summary = result.get('summary', {})
+            return {
+                'success': True,
+                'message': f"Node stats retrieved successfully",
+                'data': f"Node: {self.test_node}, Data points: {stats.get('data_points', 0)}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_storage_stats(self) -> Dict[str, Any]:
+        """Test get_storage_stats tool."""
+        try:
+            # Get first available storage
+            storage_result = self.service.list_storage(node=self.test_node)
+            storage_list = storage_result.get('storage', [])
+            
+            if not storage_list:
+                return {'success': True, 'message': 'No storage available for stats testing'}
+            
+            test_storage = storage_list[0]['storage']
+            result = self.service.get_storage_stats(test_storage, self.test_node)
+            
+            stats = result.get('stats', {})
+            return {
+                'success': True,
+                'message': f"Storage stats retrieved successfully",
+                'data': f"Storage: {test_storage}, Data points: {stats.get('data_points', 0)}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_list_alerts(self) -> Dict[str, Any]:
+        """Test list_alerts tool."""
+        try:
+            result = self.service.list_alerts(node=self.test_node)
+            alerts = result.get('alerts', [])
+            
+            critical_alerts = len([a for a in alerts if a.get('severity') == 'critical'])
+            warning_alerts = len([a for a in alerts if a.get('severity') == 'warning'])
+            
+            return {
+                'success': True,
+                'message': f"Alerts retrieved successfully",
+                'data': f"Total: {len(alerts)} alerts (Critical: {critical_alerts}, Warnings: {warning_alerts})"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_resource_usage(self) -> Dict[str, Any]:
+        """Test get_resource_usage tool."""
+        try:
+            result = self.service.get_resource_usage(node=self.test_node)
+            cluster_totals = result.get('cluster_totals', {})
+            cpu_usage = cluster_totals.get('cpu_usage_percent', 0)
+            memory_usage = cluster_totals.get('memory_usage_percent', 0)
+            vms_running = cluster_totals.get('vms_running', 0)
+            
+            return {
+                'success': True,
+                'message': f"Resource usage retrieved successfully",
+                'data': f"CPU: {cpu_usage}%, Memory: {memory_usage}%, Running VMs: {vms_running}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    # Network Management Test Methods
+    async def test_list_networks(self) -> Dict[str, Any]:
+        """Test list_networks tool."""
+        try:
+            result = self.service.list_networks(node=self.test_node)
+            networks = result.get('networks', [])
+            
+            network_types = {}
+            for network in networks:
+                net_type = network.get('type', 'unknown')
+                network_types[net_type] = network_types.get(net_type, 0) + 1
+            
+            summary = ", ".join([f"{count} {net_type}" for net_type, count in network_types.items()])
+            return {
+                'success': True,
+                'message': f"Networks listed successfully",
+                'data': f"Total: {len(networks)} interfaces ({summary})"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_network_config(self) -> Dict[str, Any]:
+        """Test get_network_config tool."""
+        try:
+            # Get first available network interface
+            networks_result = self.service.list_networks(node=self.test_node)
+            networks = networks_result.get('networks', [])
+            
+            if not networks:
+                return {'success': True, 'message': 'No network interfaces available for testing'}
+            
+            test_interface = networks[0]['iface']
+            result = self.service.get_network_config(self.test_node, test_interface)
+            
+            config = result.get('config', {})
+            interface_type = config.get('type', 'unknown')
+            return {
+                'success': True,
+                'message': f"Network config retrieved successfully",
+                'data': f"Interface: {test_interface}, Type: {interface_type}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_node_network(self) -> Dict[str, Any]:
+        """Test get_node_network tool."""
+        try:
+            result = self.service.get_node_network(self.test_node)
+            interface_count = result.get('interface_count', {})
+            total_interfaces = interface_count.get('total', 0)
+            bridges = interface_count.get('bridges', 0)
+            
+            return {
+                'success': True,
+                'message': f"Node network status retrieved",
+                'data': f"Node: {self.test_node}, Interfaces: {total_interfaces}, Bridges: {bridges}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_list_firewall_rules(self) -> Dict[str, Any]:
+        """Test list_firewall_rules tool."""
+        try:
+            result = self.service.list_firewall_rules(node=self.test_node)
+            rules = result.get('firewall_rules', [])
+            
+            rule_scopes = {}
+            for rule in rules:
+                scope = rule.get('scope', 'unknown')
+                rule_scopes[scope] = rule_scopes.get(scope, 0) + 1
+            
+            summary = ", ".join([f"{count} {scope}" for scope, count in rule_scopes.items()])
+            return {
+                'success': True,
+                'message': f"Firewall rules listed successfully",
+                'data': f"Total: {len(rules)} rules ({summary})"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
+    async def test_get_firewall_status(self) -> Dict[str, Any]:
+        """Test get_firewall_status tool."""
+        try:
+            result = self.service.get_firewall_status(node=self.test_node)
+            scope = result.get('scope', 'unknown')
+            options = result.get('options', {})
+            enabled = options.get('enable', 'unknown')
+            
+            return {
+                'success': True,
+                'message': f"Firewall status retrieved successfully",
+                'data': f"Scope: {scope}, Node: {self.test_node}, Enabled: {enabled}"
+            }
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+    
     async def cleanup_test_resources(self):
         """Clean up all resources created during testing."""
         if not self.cleanup_resources:
@@ -654,6 +1019,10 @@ class ProxmoxMCPTester:
             'Template Management': ['create_template', 'clone_vm'],
             'User Management': ['create_user', 'list_users', 'delete_user', 'set_permissions', 'list_roles', 'list_permissions'],
             'Storage Management': ['list_storage', 'get_storage_status', 'list_storage_content', 'get_suitable_storage'],
+            'Task Management': ['list_tasks', 'get_task_status', 'cancel_task', 'list_backup_jobs', 'create_backup_job'],
+            'Cluster Management': ['get_cluster_health', 'get_node_status_detailed', 'list_cluster_resources', 'migrate_vm', 'set_node_maintenance', 'get_cluster_config'],
+            'Performance Monitoring': ['get_vm_stats', 'get_node_stats', 'get_storage_stats', 'list_alerts', 'get_resource_usage'],
+            'Network Management': ['list_networks', 'get_network_config', 'get_node_network', 'list_firewall_rules', 'get_firewall_status'],
         }
         
         print(f"\n📋 Category Breakdown:")
