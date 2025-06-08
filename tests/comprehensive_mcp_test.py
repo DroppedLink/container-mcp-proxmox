@@ -107,8 +107,8 @@ class ProxmoxMCPTester:
         print("\n🚨 Backup and Restore Test Warning")
         print("Some tests will create and delete backups (create_backup, list_backups, restore_backup).")
         print("These operations are reversible but will temporarily use cluster resources.")
-        skip_backup_restore = input("Skip backup and restore tests? (y/N): ").strip().lower()
-        self.skip_backup_restore = skip_backup_restore in ['y', 'yes']
+        skip_backup_restore = input("Skip backup and restore tests? (Y/n): ").strip().lower()
+        self.skip_backup_restore = skip_backup_restore not in ['n', 'no']
         
         print(f"\n✅ Configuration complete:")
         print(f"   • Test Node: {self.test_node}")
@@ -335,13 +335,22 @@ class ProxmoxMCPTester:
             return {'success': True, 'message': 'Skipped (destructive test disabled)'}
             
         try:
+            # Get suitable storage first to determine format
+            storage_result = await self.service.get_suitable_storage(self.test_node, "images")
+            suitable_storage = storage_result.get('suitable_storage', [])
+            
+            storage = "local-lvm"  # default
+            if suitable_storage:
+                storage = suitable_storage[0]['storage']
+            
             result = await self.service.create_vm(
                 vmid=self.test_vmid,
                 node=self.test_node,
                 name=f"MCP-Test-VM-{self.test_vmid}",
                 cores=1,
                 memory=512,
-                disk_size="8"
+                disk_size="8",
+                storage=storage
             )
             
             self.cleanup_resources.append(('vm', self.test_vmid, self.test_node))
@@ -362,6 +371,14 @@ class ProxmoxMCPTester:
         # If VM creation failed, try creating a container instead
         if len(self.cleanup_resources) == 0 or 'vm' not in [r[0] for r in self.cleanup_resources]:
             try:
+                # Get suitable storage for containers
+                storage_result = await self.service.get_suitable_storage(self.test_node, "images")
+                suitable_storage = storage_result.get('suitable_storage', [])
+                
+                storage = "local-lvm"  # default
+                if suitable_storage:
+                    storage = suitable_storage[0]['storage']
+                
                 # Try to create a simple container instead
                 container_vmid = str(int(self.test_vmid) + 1)
                 result = await self.service.create_container(
@@ -370,7 +387,8 @@ class ProxmoxMCPTester:
                     hostname=f"mcp-test-ct-{container_vmid}",
                     cores=1,
                     memory=512,
-                    rootfs_size="8G"
+                    rootfs_size="8G",
+                    storage=storage
                 )
                 
                 self.cleanup_resources.append(('container', container_vmid, self.test_node))

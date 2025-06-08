@@ -80,6 +80,22 @@ class VMService(BaseProxmoxService):
                   os_type: str = "l26", start_after_create: bool = False) -> Dict[str, Any]:
         """Create a new VM."""
         try:
+            # Determine the correct disk format based on storage type
+            disk_format = "raw"  # Default for LVM, ZFS, etc.
+            try:
+                # Get storage info to determine the best format
+                storage_info = self.proxmox.nodes(node).storage(storage).get()
+                storage_type = storage_info.get('type', 'unknown')
+                
+                # Use appropriate format based on storage type
+                if storage_type in ['dir', 'nfs', 'cifs']:
+                    disk_format = "qcow2"  # These support qcow2
+                else:
+                    disk_format = "raw"    # LVM, ZFS, etc. use raw
+            except Exception:
+                # If we can't determine, use raw (safer default)
+                disk_format = "raw"
+            
             config = {
                 'vmid': int(vmid),
                 'name': name,
@@ -87,7 +103,7 @@ class VMService(BaseProxmoxService):
                 'memory': memory,
                 'ostype': os_type,
                 'scsihw': 'virtio-scsi-pci',
-                'scsi0': f'{storage}:{disk_size},format=qcow2',
+                'scsi0': f'{storage}:{disk_size},format={disk_format}',
                 'net0': 'virtio,bridge=vmbr0'
             }
             
