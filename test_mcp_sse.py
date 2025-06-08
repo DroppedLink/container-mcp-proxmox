@@ -8,12 +8,19 @@ import aiohttp
 import json
 import os
 import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 async def test_mcp_sse():
     """Test the MCP SSE protocol like Cursor IDE would"""
     print("🧪 Testing MCP SSE Protocol...")
     
-    url = os.getenv("MCP_SERVER_URL", "http://localhost:8001") + "/sse"
+    # Build URL from environment variables
+    host = os.getenv("MCP_SERVER_HOST", "localhost")
+    port = os.getenv("MCP_SERVER_PORT", "8001")
+    url = f"http://{host}:{port}/sse"
     
     # MCP initialization message
     init_message = {
@@ -66,7 +73,10 @@ async def test_messages_endpoint():
     """Test the messages POST endpoint"""
     print("\n🧪 Testing Messages POST endpoint...")
     
-                url = os.getenv("MCP_SERVER_URL", "http://localhost:8001") + "/messages"
+    # Build URL from environment variables
+    host = os.getenv("MCP_SERVER_HOST", "localhost")
+    port = os.getenv("MCP_SERVER_PORT", "8001")
+    url = f"http://{host}:{port}/messages"
     
     # MCP initialization message
     init_message = {

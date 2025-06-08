@@ -7,9 +7,19 @@ import asyncio
 import json
 import sys
 import os
+from dotenv import load_dotenv
 
-async def test_sse_server(host="localhost", port=8001):
+# Load environment variables from .env file
+load_dotenv()
+
+async def test_sse_server(host=None, port=None):
     """Test the SSE MCP server connectivity"""
+    # Use environment variables if not provided
+    if host is None:
+        host = os.getenv("MCP_SERVER_HOST", "localhost")
+    if port is None:
+        port = int(os.getenv("MCP_SERVER_PORT", "8001"))
+    
     print(f"🧪 Testing Proxmox MCP Server at {host}:{port}...\n")
     
     try:

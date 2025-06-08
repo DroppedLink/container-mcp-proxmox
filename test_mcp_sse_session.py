@@ -8,12 +8,19 @@ import aiohttp
 import json
 import os
 import re
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 async def test_mcp_with_session():
     """Test the full MCP SSE flow with session ID"""
     print("🧪 Testing MCP SSE with Session ID...")
     
-    sse_url = os.getenv("MCP_SERVER_URL", "http://localhost:8001") + "/sse"
+    # Build URL from environment variables
+    host = os.getenv("MCP_SERVER_HOST", "localhost")
+    port = os.getenv("MCP_SERVER_PORT", "8001")
+    sse_url = f"http://{host}:{port}/sse"
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -44,7 +51,7 @@ async def test_mcp_with_session():
                     return
             
             # Step 2: Use the session ID to send MCP messages
-            messages_url = f"{os.getenv('MCP_SERVER_URL', 'http://localhost:8001')}/messages/?session_id={session_id}"
+            messages_url = f"http://{host}:{port}/messages/?session_id={session_id}"
             
             print(f"\n📡 Step 2: Testing messages endpoint with session...")
             
